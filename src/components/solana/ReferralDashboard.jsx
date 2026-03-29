@@ -87,18 +87,6 @@ export default function ReferralDashboard() {
     toast.success('Referral link copied!');
   };
 
-  const shareOnTwitter = () => {
-    const text = encodeURIComponent(`Reclaim SOL from empty token accounts! Use my referral code: ${referralData.referral_code} 🚀`);
-    const url = encodeURIComponent(`${window.location.origin}?ref=${referralData.referral_code}`);
-    window.open(`https://twitter.com/intent/tweet?text=${text}&url=${url}`, '_blank');
-  };
-
-  const shareOnTelegram = () => {
-    const text = encodeURIComponent(`Reclaim SOL from empty token accounts using my referral link! 🚀`);
-    const url = encodeURIComponent(`${window.location.origin}?ref=${referralData.referral_code}`);
-    window.open(`https://t.me/share/url?url=${url}&text=${text}`, '_blank');
-  };
-
   if (!connected) {
     return (
       <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm">
@@ -188,20 +176,28 @@ export default function ReferralDashboard() {
               <Link2 className="w-4 h-4 mr-2" />
               Copy Link
             </Button>
-            <Button 
-              onClick={shareOnTwitter}
-              className="flex-1 bg-[#1DA1F2] hover:bg-[#1a8cd8] text-white"
-            >
-              <Twitter className="w-4 h-4 mr-2" />
-              Twitter
-            </Button>
-            <Button 
-              onClick={shareOnTelegram}
-              className="flex-1 bg-[#0088cc] hover:bg-[#0077b5] text-white"
-            >
-              <Send className="w-4 h-4 mr-2" />
-              Telegram
-            </Button>
+            {referralData && (
+              <>
+                <a 
+                  href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`Reclaim SOL from empty token accounts! Use my referral code: ${referralData.referral_code} 🚀`)}&url=${encodeURIComponent(`${window.location.origin}?ref=${referralData.referral_code}`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 bg-[#1DA1F2] hover:bg-[#1a8cd8] text-white"
+                >
+                  <Twitter className="w-4 h-4 mr-2" />
+                  Twitter
+                </a>
+                <a 
+                  href={`https://t.me/share/url?url=${encodeURIComponent(`${window.location.origin}?ref=${referralData.referral_code}`)}&text=${encodeURIComponent(`Reclaim SOL from empty token accounts using my referral link! 🚀`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 bg-[#0088cc] hover:bg-[#0077b5] text-white"
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  Telegram
+                </a>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
