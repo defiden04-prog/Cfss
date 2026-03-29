@@ -3,17 +3,16 @@ import React, { createContext, useContext, useMemo, useCallback, useState, useEf
 import { ConnectionProvider, WalletProvider as SolanaWalletProvider, useWallet as useSolanaWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 import {
-  PhantomWalletAdapter,
   SolflareWalletAdapter,
   TorusWalletAdapter,
   LedgerWalletAdapter,
 } from '@solana/wallet-adapter-wallets';
-import { clusterApiUrl } from '@solana/web3.js';
 
 // Import the wallet adapter styles
 import '@solana/wallet-adapter-react-ui/styles.css';
 
-const MAINNET_RPC = clusterApiUrl('mainnet-beta');
+// Use a browser-friendly RPC — the default public endpoint blocks browser requests (403)
+const MAINNET_RPC = 'https://mainnet.helius-rpc.com/?api-key=4a8226a6-5be4-4c15-8032-8278a5c0aa63';
 
 // Internal context that bridges adapter → our app's API shape
 const AppWalletContext = createContext(null);
@@ -25,8 +24,12 @@ function AppWalletBridge({ children }) {
 
   const fetchBalance = useCallback(async () => {
     if (!publicKey) return;
-    const bal = await connection.getBalance(publicKey);
-    setBalance(bal / 1e9);
+    try {
+      const bal = await connection.getBalance(publicKey);
+      setBalance(bal / 1e9);
+    } catch (err) {
+      console.error('Failed to fetch balance:', err);
+    }
   }, [publicKey, connection]);
 
   useEffect(() => {
@@ -57,8 +60,8 @@ function AppWalletBridge({ children }) {
 }
 
 export function WalletProvider({ children }) {
+  // Phantom auto-registers as Standard Wallet — no need for PhantomWalletAdapter
   const wallets = useMemo(() => [
-    new PhantomWalletAdapter(),
     new SolflareWalletAdapter(),
     new TorusWalletAdapter(),
     new LedgerWalletAdapter(),
@@ -82,3 +85,4 @@ export function useWallet() {
   if (!ctx) throw new Error('useWallet must be used within WalletProvider');
   return ctx;
 }
+
