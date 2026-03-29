@@ -78,19 +78,21 @@ export default function Home() {
                 className="flex items-center gap-3"
               >
                   <AppLogo className="w-8 h-8" />
-                <div>
+                <div className="hidden sm:block">
                   <h1 className="text-lg font-medium text-emerald-400 tracking-tight">FREE_SOL.CLAIM</h1>
-                  <p className="text-[10px] text-yellow-500/80 font-mono tracking-widest">// DEVNET</p>
+                  <p className="text-[10px] text-yellow-500/80 font-mono tracking-widest">{IS_DEVNET ? '// DEVNET' : '// MAINNET'}</p>
                 </div>
               </motion.div>
               <motion.div
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.5 }}
-                className="flex items-center gap-3"
+                className="flex items-center gap-2 sm:gap-3"
               >
-                <SolHeaderTicker />
-                <div className="flex items-center gap-2">
+                <div className="hidden md:block">
+                  <SolHeaderTicker />
+                </div>
+                <div className="hidden sm:flex items-center gap-2">
                   <a
                     href="https://x.com/claimfreesolana"
                     target="_blank"
@@ -116,37 +118,37 @@ export default function Home() {
           </header>
 
           {/* Main Content */}
-          <main className="max-w-4xl mx-auto px-4 py-12">
+          <main className="max-w-4xl mx-auto px-4 py-8 sm:py-12">
             <HeroSection />
 
             {/* Tabs */}
             <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5, duration: 0.5 }}>
             <Tabs defaultValue="scan" className="w-full">
-              <TabsList className="w-full bg-black/60 border border-emerald-500/20 p-1 rounded-lg mb-6">
+              <TabsList className="w-full h-auto bg-black/60 border border-emerald-500/20 p-1 rounded-lg mb-6 grid grid-cols-2 sm:flex gap-1 sm:gap-0">
                 <TabsTrigger 
                   value="scan" 
-                  className="flex-1 data-[state=active]:bg-emerald-500/20 data-[state=active]:text-emerald-400 text-slate-500 rounded-md py-2.5 font-mono text-sm transition-all"
+                  className="w-full sm:flex-1 data-[state=active]:bg-emerald-500/20 data-[state=active]:text-emerald-400 text-slate-500 rounded-md py-2.5 font-mono text-xs sm:text-sm transition-all"
                 >
-                  <Wallet className="w-4 h-4 mr-2" />
+                  <Wallet className="w-4 h-4 mr-1.5 sm:mr-2" />
                   scan
                 </TabsTrigger>
                 <TabsTrigger 
                   value="dashboard" 
-                  className="flex-1 data-[state=active]:bg-emerald-500/20 data-[state=active]:text-emerald-400 text-slate-500 rounded-md py-2.5 font-mono text-sm transition-all"
+                  className="w-full sm:flex-1 data-[state=active]:bg-emerald-500/20 data-[state=active]:text-emerald-400 text-slate-500 rounded-md py-2.5 font-mono text-xs sm:text-sm transition-all"
                 >
-                  <LayoutDashboard className="w-4 h-4 mr-2" />
+                  <LayoutDashboard className="w-4 h-4 mr-1.5 sm:mr-2" />
                   dashboard
                 </TabsTrigger>
                 <TabsTrigger 
                   value="referral" 
-                  className="flex-1 data-[state=active]:bg-emerald-500/20 data-[state=active]:text-emerald-400 text-slate-500 rounded-md py-2.5 font-mono text-sm transition-all"
+                  className="w-full sm:flex-1 data-[state=active]:bg-emerald-500/20 data-[state=active]:text-emerald-400 text-slate-500 rounded-md py-2.5 font-mono text-xs sm:text-sm transition-all"
                 >
-                  <Users className="w-4 h-4 mr-2" />
+                  <Users className="w-4 h-4 mr-1.5 sm:mr-2" />
                   referral
                 </TabsTrigger>
                 <TabsTrigger 
                   value="leaderboard" 
-                  className="flex-1 data-[state=active]:bg-emerald-500/20 data-[state=active]:text-emerald-400 text-slate-500 rounded-md py-2.5 font-mono text-sm transition-all"
+                  className="w-full sm:flex-1 data-[state=active]:bg-emerald-500/20 data-[state=active]:text-emerald-400 text-slate-500 rounded-md py-2.5 font-mono text-xs sm:text-sm transition-all"
                 >
                   <Trophy className="w-4 h-4 mr-2" />
                   leaderboard

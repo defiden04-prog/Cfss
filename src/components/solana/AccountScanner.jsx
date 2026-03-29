@@ -529,44 +529,46 @@ export default function AccountScanner({ initialReferral = '' }) {
                 )}
 
                 {/* Stats row */}
-                <div className="grid grid-cols-3 divide-x divide-emerald-500/10 border-b border-emerald-500/10">
-                  <div className="px-4 py-3 text-center">
-                    <p className="text-[10px] text-slate-600 uppercase tracking-widest mb-1">accounts</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-emerald-500/10 border-b border-emerald-500/10">
+                  <div className="px-4 py-3 text-center flex sm:block items-center justify-between">
+                    <p className="text-[10px] text-slate-600 uppercase tracking-widest sm:mb-1">accounts</p>
                     <p className="text-lg font-mono text-emerald-400">{selectedAccounts.size}</p>
                   </div>
-                  <div className="px-4 py-3 text-center">
-                    <p className="text-[10px] text-slate-600 uppercase tracking-widest mb-1">gross_sol</p>
+                  <div className="px-4 py-3 text-center flex sm:block items-center justify-between">
+                    <p className="text-[10px] text-slate-600 uppercase tracking-widest sm:mb-1">gross_sol</p>
                     <div className="flex items-center justify-center gap-1">
                       <SolanaLogo className="w-3.5 h-3.5 text-emerald-400" />
                       <p className="text-lg font-mono text-emerald-400">{totalClaimable.toFixed(4)}</p>
                     </div>
                   </div>
-                  <div className="px-4 py-3 text-center">
-                    <p className="text-[10px] text-slate-600 uppercase tracking-widest mb-1">net_sol</p>
-                    <div className="flex items-center justify-center gap-1">
-                      <SolanaLogo className="w-3.5 h-3.5 text-emerald-300" />
-                      <p className="text-lg font-mono text-emerald-300 font-semibold">
-                        {(totalClaimable - estimatedBatches * 0.000005).toFixed(4)}
-                      </p>
+                  <div className="px-4 py-3 text-center flex sm:block items-center justify-between">
+                    <p className="text-[10px] text-slate-600 uppercase tracking-widest sm:mb-1">net_sol</p>
+                    <div>
+                      <div className="flex items-center justify-end sm:justify-center gap-1">
+                        <SolanaLogo className="w-3.5 h-3.5 text-emerald-300" />
+                        <p className="text-lg font-mono text-emerald-300 font-semibold">
+                          {(totalClaimable - estimatedBatches * 0.000005).toFixed(4)}
+                        </p>
+                      </div>
+                      {fiatValue && (
+                        <p className="text-[10px] text-yellow-500/70 font-mono mt-0.5 flex items-center sm:justify-center justify-end gap-1">
+                          <DollarSign className="w-2.5 h-2.5" />
+                          {((totalClaimable - estimatedBatches * 0.000005) * solPrice).toFixed(2)} USD
+                        </p>
+                      )}
                     </div>
-                    {fiatValue && (
-                      <p className="text-[10px] text-yellow-500/70 font-mono mt-0.5 flex items-center justify-center gap-1">
-                        <DollarSign className="w-2.5 h-2.5" />
-                        {((totalClaimable - estimatedBatches * 0.000005) * solPrice).toFixed(2)} USD
-                      </p>
-                    )}
                   </div>
                 </div>
 
                 {/* Action row */}
-                <div className="px-4 py-3 flex items-center justify-between gap-3">
+                <div className="px-4 py-3 flex flex-col sm:flex-row items-center sm:justify-between gap-4 sm:gap-3 text-center sm:text-left">
                   <p className="text-[10px] text-slate-600 font-mono">
                     ~{(estimatedBatches * 0.000005).toFixed(6)} SOL in network fees · {estimatedBatches > 1 ? `batched into ${estimatedBatches} txs` : '1 tx (all accounts fit!)'}
                   </p>
                   <Button
                     onClick={closing ? undefined : handleClaimClick}
                     disabled={closing}
-                    className="bg-emerald-500 hover:bg-emerald-400 text-black font-mono font-bold px-6 py-2.5 rounded-lg transition-all shrink-0"
+                    className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-black font-mono font-bold px-6 py-2.5 rounded-lg transition-all shrink-0"
                   >
                     {closing ? (
                       <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{batchProgress.inProgress ? `tx ${batchProgress.current}/${batchProgress.total}` : 'closing...'}</>
