@@ -80,7 +80,7 @@ export default function Home() {
                   <AppLogo className="w-8 h-8" />
                 <div className="hidden sm:block">
                   <h1 className="text-lg font-medium text-emerald-400 tracking-tight">FREE_SOL.CLAIM</h1>
-                  <p className="text-[10px] text-yellow-500/80 font-mono tracking-widest">{IS_DEVNET ? '// DEVNET' : '// MAINNET'}</p>
+                  <p className="text-[10px] text-yellow-500/80 font-mono tracking-widest">// MAINNET</p>
                 </div>
               </motion.div>
               <motion.div
