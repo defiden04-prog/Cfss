@@ -12,7 +12,7 @@ import {
 import '@solana/wallet-adapter-react-ui/styles.css';
 
 // Use a browser-friendly RPC — the default public endpoint blocks browser requests (403)
-const MAINNET_RPC = 'https://mainnet.helius-rpc.com/?api-key=4a8226a6-5be4-4c15-8032-8278a5c0aa63';
+const MAINNET_RPC = 'https://beta.helius-rpc.com/?api-key=2fd5f291-f1cd-4f86-8311-5254d60ff008';
 
 // Internal context that bridges adapter → our app's API shape
 const AppWalletContext = createContext(null);
