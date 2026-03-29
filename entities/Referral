@@ -1,0 +1,84 @@
+{
+  "name": "Referral",
+  "type": "object",
+  "properties": {
+    "referrer_wallet": {
+      "type": "string",
+      "description": "Wallet address of the referrer"
+    },
+    "referral_code": {
+      "type": "string",
+      "description": "Unique referral code"
+    },
+    "total_earnings": {
+      "type": "number",
+      "default": 0,
+      "description": "Total SOL earned from referrals"
+    },
+    "referral_count": {
+      "type": "number",
+      "default": 0,
+      "description": "Number of users who used this code"
+    },
+    "tier": {
+      "type": "string",
+      "enum": [
+        "bronze",
+        "silver",
+        "gold",
+        "platinum"
+      ],
+      "default": "bronze",
+      "description": "Current referral tier"
+    },
+    "tier_earnings": {
+      "type": "object",
+      "description": "Earnings breakdown by tier"
+    }
+  },
+  "required": [
+    "referrer_wallet",
+    "referral_code"
+  ],
+  "rls": {
+    "create": {
+      "created_by": "{{user.email}}"
+    },
+    "read": {
+      "$or": [
+        {
+          "created_by": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "created_by": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "created_by": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    }
+  }
+}

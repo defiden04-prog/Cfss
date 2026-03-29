@@ -1,0 +1,42 @@
+{
+  "name": "ScanNotification",
+  "type": "object",
+  "properties": {
+    "wallet_address": {
+      "type": "string",
+      "description": "Wallet address of the user"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "scan_complete",
+        "claim_complete",
+        "schedule_reminder",
+        "info"
+      ],
+      "default": "info"
+    },
+    "title": {
+      "type": "string",
+      "description": "Notification title"
+    },
+    "message": {
+      "type": "string",
+      "description": "Notification body"
+    },
+    "sol_amount": {
+      "type": "number",
+      "default": 0,
+      "description": "SOL amount related to this notification"
+    },
+    "read": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "wallet_address",
+    "title",
+    "message"
+  ]
+}

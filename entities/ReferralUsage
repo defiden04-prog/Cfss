@@ -1,0 +1,35 @@
+{
+  "name": "ReferralUsage",
+  "type": "object",
+  "properties": {
+    "user_wallet": {
+      "type": "string",
+      "description": "Wallet address of the user who used the referral"
+    },
+    "referral_code": {
+      "type": "string",
+      "description": "The referral code that was used"
+    },
+    "referrer_wallet": {
+      "type": "string",
+      "description": "Wallet address of the referrer"
+    },
+    "fee_paid": {
+      "type": "number",
+      "description": "Total fee paid"
+    },
+    "referrer_earned": {
+      "type": "number",
+      "description": "Amount earned by referrer (30%)"
+    },
+    "tx_signature": {
+      "type": "string",
+      "description": "Transaction signature"
+    }
+  },
+  "required": [
+    "user_wallet",
+    "referral_code",
+    "referrer_wallet"
+  ]
+}

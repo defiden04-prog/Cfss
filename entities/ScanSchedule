@@ -1,0 +1,50 @@
+{
+  "name": "ScanSchedule",
+  "type": "object",
+  "properties": {
+    "wallet_address": {
+      "type": "string",
+      "description": "Wallet address of the user"
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether auto-scan is enabled"
+    },
+    "frequency": {
+      "type": "string",
+      "enum": [
+        "daily",
+        "weekly",
+        "monthly"
+      ],
+      "default": "weekly",
+      "description": "How often to scan"
+    },
+    "notify_email": {
+      "type": "string",
+      "description": "Email for notifications"
+    },
+    "last_run": {
+      "type": "string",
+      "description": "ISO date of last scan run"
+    },
+    "next_run": {
+      "type": "string",
+      "description": "ISO date of next scheduled scan"
+    },
+    "total_auto_claimed": {
+      "type": "number",
+      "default": 0,
+      "description": "Total SOL claimed via auto-scans"
+    },
+    "auto_claim_count": {
+      "type": "number",
+      "default": 0,
+      "description": "Number of auto-claim cycles completed"
+    }
+  },
+  "required": [
+    "wallet_address"
+  ]
+}
