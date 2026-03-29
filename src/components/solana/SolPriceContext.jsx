@@ -11,12 +11,13 @@ export function SolPriceProvider({ children }) {
   const fetchPrice = async () => {
     try {
       const res = await fetch(
-        'https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd&include_24hr_change=true'
+        'https://min-api.cryptocompare.com/data/pricemultifull?fsyms=SOL&tsyms=USD'
       );
       const data = await res.json();
-      const p = data?.solana?.usd;
-      const ch = data?.solana?.usd_24h_change;
-      if (p) {
+      const coinData = data.RAW?.SOL?.USD;
+      if (coinData) {
+        const p = coinData.PRICE;
+        const ch = coinData.CHANGEPCT24HOUR;
         if (prevRef.current !== null && p !== prevRef.current) {
           const dir = p > prevRef.current ? 'up' : 'down';
           setFlash(dir);
@@ -26,7 +27,9 @@ export function SolPriceProvider({ children }) {
         setPrice(p);
         setChange(ch || 0);
       }
-    } catch {}
+    } catch (err) {
+      console.error('SOL price fetch error:', err);
+    }
   };
 
   useEffect(() => {

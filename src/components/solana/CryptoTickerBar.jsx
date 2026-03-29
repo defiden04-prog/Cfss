@@ -56,31 +56,40 @@ export default function CryptoTickerBar() {
 
   const fetchPrices = async () => {
     try {
-      const ids = COINS.map(c => c.id).join(',');
+      const symbols = COINS.map(c => c.symbol).join(',');
       const res = await fetch(
-        `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`
+        `https://min-api.cryptocompare.com/data/pricemultifull?fsyms=${symbols}&tsyms=USD`
       );
       const data = await res.json();
+      
+      if (!data.RAW) return;
+
       const newFlashes = {};
       const newPrices = {};
+      
       COINS.forEach(coin => {
-        const p = data[coin.id]?.usd;
-        const ch = data[coin.id]?.usd_24h_change;
-        if (p !== undefined) {
-          newPrices[coin.id] = { price: p, change: ch };
-          const prev = prevPrices.current[coin.id]?.price;
-          if (prev !== undefined && p !== prev) {
-            newFlashes[coin.id] = p > prev ? 'up' : 'down';
-          }
+        const coinData = data.RAW[coin.symbol]?.USD;
+        if (!coinData) return;
+
+        const p = coinData.PRICE;
+        const ch = coinData.CHANGEPCT24HOUR;
+        
+        newPrices[coin.id] = { price: p, change: ch };
+        const prev = prevPrices.current[coin.id]?.price;
+        if (prev !== undefined && p !== prev) {
+          newFlashes[coin.id] = p > prev ? 'up' : 'down';
         }
       });
+
       prevPrices.current = newPrices;
       setPrices(newPrices);
       if (Object.keys(newFlashes).length > 0) {
         setFlashes(newFlashes);
         setTimeout(() => setFlashes({}), 700);
       }
-    } catch {}
+    } catch (err) {
+      console.error('Ticker fetch error:', err);
+    }
   };
 
   useEffect(() => {
