@@ -195,7 +195,7 @@ export default function AccountScanner({ initialReferral = '' }) {
 
     try {
       // Build all transactions upfront
-      const { blockhash } = await connection.getLatestBlockhash();
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
       const transactions = [];
       const batchMeta = [];
 
@@ -211,13 +211,28 @@ export default function AccountScanner({ initialReferral = '' }) {
         batchMeta.push(batchAccounts);
       }
 
-      // Sign all transactions at once (one wallet approval popup)
-      const signedTxs = await wallet.signAllTransactions(transactions);
+      // Sign transactions — use signTransaction for single, signAllTransactions for multi
+      let signedTxs;
+      if (transactions.length === 1 && wallet.signTransaction) {
+        const signed = await wallet.signTransaction(transactions[0]);
+        signedTxs = [signed];
+      } else if (wallet.signAllTransactions) {
+        signedTxs = await wallet.signAllTransactions(transactions);
+      } else {
+        // Fallback: sign one by one
+        signedTxs = [];
+        for (const tx of transactions) {
+          signedTxs.push(await wallet.signTransaction(tx));
+        }
+      }
 
-      // Send each signed transaction sequentially
+      // Send each signed transaction via sendRawTransaction (Phantom does NOT submit)
       for (let i = 0; i < signedTxs.length; i++) {
-        const signature = await connection.sendRawTransaction(signedTxs[i].serialize());
-        await connection.confirmTransaction(signature, 'confirmed');
+        const signature = await connection.sendRawTransaction(signedTxs[i].serialize(), {
+          skipPreflight: false,
+          maxRetries: 3,
+        });
+        await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
 
         const batchReclaimed = batchMeta[i].reduce((sum, a) => sum + a.rentLamports, 0) / 1e9;
         reclaimed += batchReclaimed;

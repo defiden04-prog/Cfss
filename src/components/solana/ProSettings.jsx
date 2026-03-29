@@ -76,36 +76,34 @@ export default function ProSettings() {
       toast.error('Connect your wallet first');
       return;
     }
-    if (!IS_DEVNET && balance < PRO_FEE_SOL) {
+    if (balance < PRO_FEE_SOL) {
       toast.error(`Insufficient balance. Need ${PRO_FEE_SOL} SOL`);
       return;
     }
     setUnlocking(true);
     try {
-      if (IS_DEVNET) {
-        // On devnet — simulate a tiny self-transfer to test tx signing works
-        const { blockhash } = await connection.getLatestBlockhash();
-        const tx = new Transaction().add(
-          SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: publicKey, lamports: 1000 })
-        );
-        tx.recentBlockhash = blockhash;
-        tx.feePayer = publicKey;
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+      const tx = new Transaction().add(
+        SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: PRO_FEE_LAMPORTS })
+      );
+      tx.recentBlockhash = blockhash;
+      tx.feePayer = publicKey;
+
+      // Use signTransaction per Phantom docs — app submits via sendRawTransaction
+      let sig;
+      if (wallet.signTransaction) {
+        const signed = await wallet.signTransaction(tx);
+        sig = await connection.sendRawTransaction(signed.serialize(), { skipPreflight: false, maxRetries: 3 });
+      } else if (wallet.signAllTransactions) {
         const [signed] = await wallet.signAllTransactions([tx]);
-        const sig = await connection.sendRawTransaction(signed.serialize());
-        await connection.confirmTransaction(sig, 'confirmed');
-        toast.success('Pro unlocked! (devnet test tx confirmed)');
+        sig = await connection.sendRawTransaction(signed.serialize(), { skipPreflight: false, maxRetries: 3 });
       } else {
-        const { blockhash } = await connection.getLatestBlockhash();
-        const tx = new Transaction().add(
-          SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: PRO_FEE_LAMPORTS })
-        );
-        tx.recentBlockhash = blockhash;
-        tx.feePayer = publicKey;
-        const [signed] = await wallet.signAllTransactions([tx]);
-        const sig = await connection.sendRawTransaction(signed.serialize());
-        await connection.confirmTransaction(sig, 'confirmed');
-        toast.success('Pro unlocked! Transaction confirmed.');
+        throw new Error('Wallet does not support transaction signing');
       }
+
+      await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, 'confirmed');
+      toast.success('Pro unlocked! Transaction confirmed.');
+
       localStorage.setItem('pro_unlocked', 'true');
       setUnlocked(true);
       fetchBalance();
