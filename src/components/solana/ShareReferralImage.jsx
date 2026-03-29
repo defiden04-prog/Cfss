@@ -35,6 +35,7 @@ export default function ShareReferralImage({ referralData, publicKey }) {
           files: [file],
           title: 'My Free SOL Claim Dashboard',
           text: `Reclaim SOL from empty token accounts using my referral code: ${referralData.referral_code} 🚀`,
+          url: `${window.location.origin}?ref=${referralData.referral_code}`
         });
         toast.success("Shared successfully!");
       } else {
