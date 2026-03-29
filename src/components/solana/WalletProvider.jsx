@@ -3,6 +3,7 @@ import React, { createContext, useContext, useMemo, useCallback, useState, useEf
 import { ConnectionProvider, WalletProvider as SolanaWalletProvider, useWallet as useSolanaWallet, useConnection } from '@solana/wallet-adapter-react';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 import {
+  PhantomWalletAdapter,
   SolflareWalletAdapter,
   TorusWalletAdapter,
   LedgerWalletAdapter,
@@ -62,8 +63,9 @@ function AppWalletBridge({ children }) {
 }
 
 export function WalletProvider({ children }) {
-  // Phantom auto-registers as Standard Wallet — no need for PhantomWalletAdapter
+  // PhantomWalletAdapter is required for mobile deep-linking to work on standard browsers (Safari/Chrome)
   const wallets = useMemo(() => [
+    new PhantomWalletAdapter(),
     new SolflareWalletAdapter(),
     new TorusWalletAdapter(),
     new LedgerWalletAdapter(),
