@@ -18,7 +18,7 @@ const MAINNET_RPC = 'https://mainnet.helius-rpc.com/?api-key=2fd5f291-f1cd-4f86-
 const AppWalletContext = createContext(null);
 
 function AppWalletBridge({ children }) {
-  const { connected, connecting, publicKey, disconnect, signTransaction, signAllTransactions } = useSolanaWallet();
+  const { connected, connecting, publicKey, disconnect, signTransaction, signAllTransactions, sendTransaction } = useSolanaWallet();
   const { connection } = useConnection();
   const [balance, setBalance] = useState(0);
 
@@ -37,11 +37,13 @@ function AppWalletBridge({ children }) {
     else setBalance(0);
   }, [connected, publicKey, fetchBalance]);
 
-  // wallet object with signTransaction method from the adapter hook directly
+  // wallet object — expose sendTransaction for Phantom Lighthouse guard compatibility
   const wallet = useMemo(() => ({
     signTransaction: signTransaction ? (tx) => signTransaction(tx) : null,
     signAllTransactions: signAllTransactions ? (txs) => signAllTransactions(txs) : null,
-  }), [signTransaction, signAllTransactions]);
+    // sendTransaction calls Phantom's signAndSendTransaction under the hood
+    sendTransaction: sendTransaction ? (tx, conn, opts) => sendTransaction(tx, conn, opts) : null,
+  }), [signTransaction, signAllTransactions, sendTransaction]);
 
   return (
     <AppWalletContext.Provider value={{

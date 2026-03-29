@@ -89,17 +89,11 @@ export default function ProSettings() {
       tx.recentBlockhash = blockhash;
       tx.feePayer = publicKey;
 
-      // Use signTransaction per Phantom docs — app submits via sendRawTransaction
-      let sig;
-      if (wallet.signTransaction) {
-        const signed = await wallet.signTransaction(tx);
-        sig = await connection.sendRawTransaction(signed.serialize(), { skipPreflight: false, maxRetries: 3 });
-      } else if (wallet.signAllTransactions) {
-        const [signed] = await wallet.signAllTransactions([tx]);
-        sig = await connection.sendRawTransaction(signed.serialize(), { skipPreflight: false, maxRetries: 3 });
-      } else {
-        throw new Error('Wallet does not support transaction signing');
-      }
+      // Use sendTransaction — calls Phantom's signAndSendTransaction for Lighthouse guard
+      const sig = await wallet.sendTransaction(tx, connection, {
+        skipPreflight: false,
+        maxRetries: 3,
+      });
 
       await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, 'confirmed');
       toast.success('Pro unlocked! Transaction confirmed.');

