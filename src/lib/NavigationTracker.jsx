@@ -32,7 +32,7 @@ export default function NavigationTracker() {
         }
 
         if (isAuthenticated && pageName) {
-            // base44.appLogs deprecated
+            // Activity logging placeholder
         }
     }, [location, isAuthenticated, Pages, mainPageKey]);
 
