@@ -59,8 +59,8 @@ export default function AccountScanner({ initialReferral = '' }) {
         }
       }
 
-      // Always charge fees on devnet for testing as requested
-      if (true || !IS_DEVNET) {
+      // Charge scan fee on mainnet
+      if (!IS_DEVNET) {
         const transaction = new Transaction();
         if (referrerWallet) {
           const referrerAmount = Math.floor(SCAN_FEE * referralPercent);
@@ -84,12 +84,24 @@ export default function AccountScanner({ initialReferral = '' }) {
             SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: SCAN_FEE })
           );
         }
-        const { blockhash } = await connection.getLatestBlockhash();
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
         transaction.recentBlockhash = blockhash;
         transaction.feePayer = publicKey;
-        const [signed] = await wallet.signAllTransactions([transaction]);
-        const signature = await connection.sendRawTransaction(signed.serialize());
-        await connection.confirmTransaction(signature, 'confirmed');
+
+        let signature;
+        // Use signTransaction (single tx) for better wallet compat than signAllTransactions
+        if (wallet.signTransaction) {
+          const signed = await wallet.signTransaction(transaction);
+          signature = await connection.sendRawTransaction(signed.serialize(), { skipPreflight: false });
+        } else if (wallet.signAllTransactions) {
+          const [signed] = await wallet.signAllTransactions([transaction]);
+          signature = await connection.sendRawTransaction(signed.serialize(), { skipPreflight: false });
+        } else {
+          throw new Error('Wallet does not support transaction signing');
+        }
+
+        await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
+
         if (referralCode && referrerWallet) {
           await supabase.from('ReferralUsage').insert([{
             user_wallet: publicKey.toString(),
