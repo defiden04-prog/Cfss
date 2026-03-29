@@ -1,7 +1,4 @@
-// Buffer polyfill for Solana web3.js (must be first)
-import { Buffer } from 'buffer';
-if (typeof globalThis !== 'undefined') globalThis.Buffer = Buffer;
-if (typeof window !== 'undefined') window.Buffer = Buffer;
+
 
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'

@@ -4,13 +4,24 @@ import path from 'path'
 
 // https://vite.dev/config/
 export default defineConfig({
-  logLevel: 'error', // Suppress warnings, only show errors
+  logLevel: 'error',
   plugins: [
     react(),
   ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+    },
+  },
+  define: {
+    'global': 'globalThis',
+    'process.env': {},
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      define: {
+        global: 'globalThis',
+      },
     },
   },
 });
