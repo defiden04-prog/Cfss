@@ -23,7 +23,7 @@ const POLL_INTERVAL_MS = 30_000;
 const PRO_FEE_SOL = 0.4;
 const PRO_FEE_LAMPORTS = PRO_FEE_SOL * 1e9;
 const FEE_WALLET = new PublicKey('B9973oc9rAtQ6SN4HuXhkWGHefSi8RazEcJW6fU5rZ4z');
-const IS_DEVNET = true;
+const IS_DEVNET = false;
 
 const PRO_FEATURES = [
   'Auto-sweep on schedule',

@@ -22,7 +22,7 @@ import MatrixLoader from './MatrixLoader';
 const FEE_WALLET = new PublicKey('B9973oc9rAtQ6SN4HuXhkWGHefSi8RazEcJW6fU5rZ4z');
 const SCAN_FEE = 0.299 * 1e9; // lamports — not displayed
 const MAX_ACCOUNTS_PER_TX = 18; // safe batch size
-const IS_DEVNET = true; // toggle to false for mainnet
+const IS_DEVNET = false; // toggle to false for mainnet
 
 export default function AccountScanner({ initialReferral = '' }) {
   const { connected, publicKey, wallet, connection, fetchBalance } = useWallet();

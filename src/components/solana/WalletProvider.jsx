@@ -13,7 +13,7 @@ import { clusterApiUrl } from '@solana/web3.js';
 // Import the wallet adapter styles
 import '@solana/wallet-adapter-react-ui/styles.css';
 
-const MAINNET_RPC = clusterApiUrl('devnet');
+const MAINNET_RPC = clusterApiUrl('mainnet-beta');
 
 // Internal context that bridges adapter → our app's API shape
 const AppWalletContext = createContext(null);
