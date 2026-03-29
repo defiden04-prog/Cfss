@@ -11,6 +11,7 @@ import SolanaLogo from './SolanaLogo';
 import TierProgressCard from './TierProgressCard';
 import AllTiersCard from './AllTiersCard';
 import TierBadge from './TierBadge';
+import ShareReferralImage from './ShareReferralImage';
 import { calculateTier, TIERS } from './TierConfig';
 
 export default function ReferralDashboard() {
@@ -199,6 +200,7 @@ export default function ReferralDashboard() {
               </>
             )}
           </div>
+          <ShareReferralImage referralData={referralData} publicKey={publicKey?.toString()} />
         </CardContent>
       </Card>
 
