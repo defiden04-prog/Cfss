@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import logo from '../../assets/logo.jpg';
+import logo from '../../assets/logo.png';
 
 export default function AppLogo({ className = "w-8 h-8" }) {
   return (
