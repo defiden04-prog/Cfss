@@ -175,23 +175,33 @@ export default function Home() {
               </TabsContent>
 
               <TabsContent value="dashboard">
-                <UserDashboard />
+                <Suspense fallback={<div className="flex justify-center p-10"><Loader2 className="animate-spin text-emerald-400 w-6 h-6" /></div>}>
+                  <UserDashboard />
+                </Suspense>
               </TabsContent>
 
               <TabsContent value="referral">
-                <ReferralDashboard />
+                <Suspense fallback={<div className="flex justify-center p-10"><Loader2 className="animate-spin text-emerald-400 w-6 h-6" /></div>}>
+                  <ReferralDashboard />
+                </Suspense>
               </TabsContent>
 
               <TabsContent value="leaderboard">
-                <Leaderboard />
+                <Suspense fallback={<div className="flex justify-center p-10"><Loader2 className="animate-spin text-emerald-400 w-6 h-6" /></div>}>
+                  <Leaderboard />
+                </Suspense>
               </TabsContent>
 
               <TabsContent value="schedule">
-                <ScheduleManager />
+                <Suspense fallback={<div className="flex justify-center p-10"><Loader2 className="animate-spin text-emerald-400 w-6 h-6" /></div>}>
+                  <ScheduleManager />
+                </Suspense>
               </TabsContent>
 
               <TabsContent value="pro">
-                <ProSettings />
+                <Suspense fallback={<div className="flex justify-center p-10"><Loader2 className="animate-spin text-emerald-400 w-6 h-6" /></div>}>
+                  <ProSettings />
+                </Suspense>
               </TabsContent>
             </Tabs>
             </motion.div>
