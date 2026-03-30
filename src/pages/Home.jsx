@@ -13,6 +13,7 @@ import HeroSection from '../components/solana/HeroSection';
 import SolanaLogo from '../components/solana/SolanaLogo';
 import AppLogo from '../components/solana/AppLogo';
 import LiveClaimPopup from '../components/solana/LiveClaimPopup';
+import HighValueClaimPopup from '../components/solana/HighValueClaimPopup';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Suspense } from 'react';
 import { motion } from 'framer-motion';
@@ -65,6 +66,7 @@ export default function Home() {
         </div>
 
         <LiveClaimPopup />
+        <HighValueClaimPopup />
         <div className="relative z-10">
           {/* Crypto Ticker Bar */}
           <CryptoTickerBar />
