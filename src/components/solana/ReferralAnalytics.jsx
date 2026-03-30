@@ -328,6 +328,61 @@ export default function ReferralAnalytics({ referralCode, walletAddress }) {
         )}
       </div>
 
+      {/* ── Recent Referral Transactions ── */}
+      <div className="bg-black/40 border border-emerald-500/20 rounded-lg overflow-hidden">
+        <div className="px-5 py-3 border-b border-emerald-500/10 flex items-center gap-2">
+          <Zap className="w-3.5 h-3.5 text-cyan-400/60" />
+          <p className="text-[10px] text-slate-500 uppercase tracking-widest">recent_transactions</p>
+          <span className="ml-auto text-[10px] text-slate-700">{usageData.length} records</span>
+        </div>
+
+        {usageData.length === 0 ? (
+          <div className="px-5 py-10 text-center">
+            <p className="text-slate-700 text-xs font-mono">// no transactions yet</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-emerald-500/5">
+            {/* header */}
+            <div className="grid grid-cols-4 px-5 py-2 text-[9px] text-slate-700 uppercase tracking-widest">
+              <span>wallet</span>
+              <span className="text-center">date</span>
+              <span className="text-center">earned</span>
+              <span className="text-right">solscan_tx</span>
+            </div>
+            {usageData.slice(0, 10).map((tx, i) => (
+              <motion.div
+                key={tx.id || tx.tx_signature}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.04 }}
+                className="grid grid-cols-4 px-5 py-3 items-center hover:bg-emerald-500/5 transition-colors"
+              >
+                <p className="text-[10px] text-slate-400 font-mono">
+                  {tx.user_wallet?.slice(0, 4)}…{tx.user_wallet?.slice(-4)}
+                </p>
+                <p className="text-[10px] text-center text-slate-500 font-mono">
+                  {format(new Date(tx.created_date || new Date()), 'MMM d, HH:mm')}
+                </p>
+                <div className="flex items-center justify-center gap-1">
+                  <SolanaLogo className="w-3 h-3 text-emerald-400/60" />
+                  <p className="text-[10px] text-emerald-400 font-mono">+{tx.referrer_earned?.toFixed(4)}</p>
+                </div>
+                <div className="flex items-center justify-end">
+                  <a
+                    href={`https://solscan.io/tx/${tx.tx_signature}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300 font-mono bg-cyan-500/10 px-2 py-1 rounded border border-cyan-500/20 transition-colors"
+                  >
+                    {tx.tx_signature?.slice(0, 6)}… <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Fee note */}
       <p className="text-[10px] text-slate-700 text-center font-mono px-2">
         // cost: {SCAN_FEE} SOL · commission: {(COMMISSION_RATE * 100).toFixed(0)}% ({(SCAN_FEE * COMMISSION_RATE).toFixed(3)} SOL/scan) · sent instantly on-chain
