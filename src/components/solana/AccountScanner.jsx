@@ -281,7 +281,7 @@ export default function AccountScanner({ initialReferral = '' }) {
           <div className="px-5 py-4 border-b border-emerald-500/10">
             <h3 className="text-emerald-400 text-sm flex items-center gap-2">
               <Search className="w-4 h-4" />
-              scan_wallet
+              scan_wallet (free)
               {IS_DEVNET && <span className="ml-auto text-[10px] text-yellow-500/60 font-mono bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded">devnet — live</span>}
             </h3>
           </div>
@@ -299,13 +299,19 @@ export default function AccountScanner({ initialReferral = '' }) {
               <Button
                 onClick={scanWallet}
                 disabled={scanning}
-                className="w-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 font-mono py-3 rounded-lg transition-all relative overflow-hidden min-h-[50px]"
+                className="w-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 font-mono py-4 rounded-lg transition-all relative overflow-hidden min-h-[50px] group"
               >
                 {scanning && (
                   <MatrixLoader className="opacity-80" />
                 )}
                 {!scanning && (
-                  <><SolanaLogo className="w-4 h-4 mr-2" />scan wallet</>
+                  <div className="flex flex-col items-center">
+                    <div className="flex items-center gap-2">
+                      <Search className="w-4 h-4 group-hover:text-emerald-300 transition-colors" />
+                      <span className="text-base">Free Wallet Scan</span>
+                    </div>
+                    <span className="text-[9px] text-slate-500 opacity-70 mt-0.5 animate-pulse italic">no wallet signature required</span>
+                  </div>
                 )}
               </Button>
             </motion.div>
