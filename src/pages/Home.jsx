@@ -4,19 +4,20 @@ import { SolPriceProvider } from '../components/solana/SolPriceContext';
 import SolHeaderTicker from '../components/solana/SolHeaderTicker';
 import WalletButton from '../components/solana/WalletButton';
 import AccountScanner from '../components/solana/AccountScanner';
-import ReferralDashboard from '../components/solana/ReferralDashboard';
+const ReferralDashboard = React.lazy(() => import('../components/solana/ReferralDashboard'));
+const UserDashboard = React.lazy(() => import('../components/solana/UserDashboard'));
+const Leaderboard = React.lazy(() => import('../components/solana/Leaderboard'));
+const ScheduleManager = React.lazy(() => import('../components/solana/ScheduleManager'));
+const ProSettings = React.lazy(() => import('../components/solana/ProSettings'));
 import HeroSection from '../components/solana/HeroSection';
-import Leaderboard from '../components/solana/Leaderboard';
 import SolanaLogo from '../components/solana/SolanaLogo';
 import AppLogo from '../components/solana/AppLogo';
 import LiveClaimPopup from '../components/solana/LiveClaimPopup';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import UserDashboard from '../components/solana/UserDashboard';
+import { Suspense } from 'react';
 import { motion } from 'framer-motion';
-import { Wallet, Users, Trophy, LayoutDashboard, Clock, Shield, Twitter, Send } from 'lucide-react';
-import ScheduleManager from '../components/solana/ScheduleManager';
+import { Wallet, Users, Trophy, LayoutDashboard, Clock, Shield, Twitter, Send, Loader2 } from 'lucide-react';
 import CryptoTickerBar from '../components/solana/CryptoTickerBar';
-import ProSettings from '../components/solana/ProSettings';
 
 export default function Home() {
   const [referralFromUrl, setReferralFromUrl] = useState('');
