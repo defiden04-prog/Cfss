@@ -24,9 +24,6 @@ export default function ClaimProgressModal({
   const [currentStep, setCurrentStep] = useState(-1);
   const [simulationDone, setSimulationDone] = useState(false);
 
-  const SERVICE_FEE = 0.299;
-  const isUnprofitable = totalSol < SERVICE_FEE;
-
   useEffect(() => {
     if (!visible) {
       setCurrentStep(-1);
@@ -131,23 +128,13 @@ export default function ClaimProgressModal({
                   {/* Summary & Warnings */}
                   {simulationDone && !executing && (
                     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-                      {isUnprofitable && (
-                        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 flex items-start gap-3">
-                          <Shield className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                          <div>
-                            <p className="text-[10px] text-amber-500 font-bold uppercase tracking-tight">low_yield_warning</p>
-                            <p className="text-[10px] text-amber-500/80 leading-relaxed">Reclaimed SOL (+{totalSol.toFixed(4)}) is less than the service fee (0.299). You will have a net loss of ≈{(0.299 - totalSol).toFixed(4)} SOL.</p>
-                          </div>
-                        </div>
-                      )}
-
                       <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4">
                         <div className="flex justify-between items-end">
                           <div>
                             <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">net_extraction</p>
                             <div className="flex items-center gap-2">
                               <SolanaLogo className="w-5 h-5 text-emerald-400" />
-                              <span className={`text-2xl font-bold tabular-nums ${isUnprofitable ? 'text-amber-400' : 'text-emerald-400'}`}>
+                              <span className="text-2xl font-bold tabular-nums text-emerald-400">
                                 {totalSol.toFixed(4)} SOL
                               </span>
                             </div>
