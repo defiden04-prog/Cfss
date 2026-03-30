@@ -1,1 +1,16 @@
-{"name":"Claim Free Solana","short_name":"CFS","start_url":".","display":"standalone","background_color":"#000000","theme_color":"#10b981"}
+{
+  "name": "Claim Free Solana",
+  "short_name": "CFS",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#10b981",
+  "icons": [
+    {
+      "src": "logo.png",
+      "sizes": "400x400",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
