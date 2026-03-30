@@ -25,20 +25,4 @@ export default defineConfig({
       },
     },
   },
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes('node_modules')) {
-            if (id.includes('@solana')) return 'solana';
-            if (id.includes('framer-motion')) return 'animation';
-            if (id.includes('recharts')) return 'charts';
-            if (id.includes('lucide-react')) return 'icons';
-            if (id.includes('react/') || id.includes('react-dom/')) return 'react';
-            return 'vendor'; // all other node_modules
-          }
-        }
-      }
-    }
-  }
 });
