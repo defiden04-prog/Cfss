@@ -12,6 +12,7 @@ import TierProgressCard from './TierProgressCard';
 import AllTiersCard from './AllTiersCard';
 import TierBadge from './TierBadge';
 import ShareReferralImage from './ShareReferralImage';
+import ClaimPass from './ClaimPass';
 import { calculateTier, TIERS } from './TierConfig';
 
 export default function ReferralDashboard() {
@@ -199,6 +200,10 @@ export default function ReferralDashboard() {
                 </a>
               </>
             )}
+          </div>
+          <div className="pt-6 border-t border-white/5">
+            <h4 className="text-[10px] text-emerald-500/50 uppercase tracking-widest font-mono mb-4 text-center">// VIP_CLAIM_PASS_GENERATOR</h4>
+            <ClaimPass referralCode={referralData.referral_code} />
           </div>
           <ShareReferralImage referralData={referralData} publicKey={publicKey?.toString()} />
         </CardContent>
