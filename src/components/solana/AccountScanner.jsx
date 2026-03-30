@@ -37,6 +37,7 @@ export default function AccountScanner({ initialReferral = '' }) {
   const [minRentFilter, setMinRentFilter] = useState('');
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0, inProgress: false });
   const [totalReclaimed, setTotalReclaimed] = useState(0);
+  const [lastSignature, setLastSignature] = useState(null);
   const [claimDone, setClaimDone] = useState(false);
   const [showClaimModal, setShowClaimModal] = useState(false);
 
@@ -192,6 +193,7 @@ export default function AccountScanner({ initialReferral = '' }) {
           maxRetries: 3,
         });
         await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
+        setLastSignature(signature); // Track latest for Solscan link in modal
 
         const batchReclaimed = batchMeta[i].reduce((sum, a) => sum + a.rentLamports, 0) / 1e9;
         reclaimed += batchReclaimed;
@@ -204,6 +206,7 @@ export default function AccountScanner({ initialReferral = '' }) {
       }
 
       setTotalReclaimed(reclaimed);
+      setLastSignature(transactions[transactions.length - 1]?.signature || null); // Note: signature is returned from sendTransaction
       setClaimDone(true);
       toast.success(`Reclaimed ${reclaimed.toFixed(6)} SOL from ${closedKeys.size} accounts!`);
       setAccounts(prev => prev.filter(a => !closedKeys.has(a.pubkey.toString())));
@@ -234,8 +237,15 @@ export default function AccountScanner({ initialReferral = '' }) {
 
   const estimatedBatches = Math.ceil(selectedAccounts.size / MAX_ACCOUNTS_PER_TX);
 
-  const handleClaimClick = () => setShowClaimModal(true);
-  const handleModalProceed = () => { setShowClaimModal(false); closeSelectedAccounts(); };
+  const handleClaimClick = () => {
+    setClaimDone(false); // Reset for new session
+    setLastSignature(null);
+    setShowClaimModal(true);
+  };
+  const handleModalProceed = () => { 
+    // Do NOT close modal, it will now transition to executing/completed states
+    closeSelectedAccounts(); 
+  };
   const handleModalCancel = () => setShowClaimModal(false);
 
   const fiatValue = solPrice ? (totalClaimable * solPrice) : null;
@@ -269,6 +279,9 @@ export default function AccountScanner({ initialReferral = '' }) {
         totalSol={totalClaimable - estimatedBatches * 0.000005}
         onProceed={handleModalProceed}
         onCancel={handleModalCancel}
+        executing={closing}
+        completed={claimDone}
+        signature={lastSignature}
       />
       <AnimatePresence>
       {!scanned && (

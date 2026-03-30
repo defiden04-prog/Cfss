@@ -11,16 +11,30 @@ const STEPS = [
   { id: 'broadcast', icon: Zap,      label: 'Broadcasting to Network', sublabel: 'Sending to Solana validators...' },
 ];
 
-export default function ClaimProgressModal({ visible, totalAccounts, totalSol, onProceed, onCancel }) {
+export default function ClaimProgressModal({ 
+  visible, 
+  totalAccounts, 
+  totalSol, 
+  onProceed, 
+  onCancel,
+  executing = false,
+  completed = false,
+  signature = null
+}) {
   const [currentStep, setCurrentStep] = useState(-1);
-  const [done, setDone] = useState(false);
+  const [simulationDone, setSimulationDone] = useState(false);
+
+  const SERVICE_FEE = 0.299;
+  const isUnprofitable = totalSol < SERVICE_FEE;
 
   useEffect(() => {
     if (!visible) {
       setCurrentStep(-1);
-      setDone(false);
+      setSimulationDone(false);
       return;
     }
+    if (executing || completed) return; // Don't run simulation if already executing
+
     // Simulate step-by-step progress
     let step = 0;
     setCurrentStep(0);
@@ -28,16 +42,16 @@ export default function ClaimProgressModal({ visible, totalAccounts, totalSol, o
       step += 1;
       if (step < STEPS.length) {
         setCurrentStep(step);
-        setTimeout(advance, 700 + Math.random() * 500);
+        setTimeout(advance, 600 + Math.random() * 400);
       } else {
-        setDone(true);
+        setSimulationDone(true);
       }
     };
     const t = setTimeout(advance, 800 + Math.random() * 400);
     return () => clearTimeout(t);
-  }, [visible]);
+  }, [visible, executing, completed]);
 
-  const progress = done ? 100 : currentStep >= 0 ? Math.round(((currentStep) / STEPS.length) * 100) : 0;
+  const progress = completed ? 100 : executing ? 90 : simulationDone ? 100 : currentStep >= 0 ? Math.round(((currentStep) / STEPS.length) * 100) : 0;
 
   return (
     <AnimatePresence>
@@ -46,178 +60,154 @@ export default function ClaimProgressModal({ visible, totalAccounts, totalSol, o
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm px-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md px-4"
         >
           <motion.div
-            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            initial={{ scale: 0.95, opacity: 0, y: 30 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.9, opacity: 0, y: 20 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-            className="w-full max-w-md bg-black border border-emerald-500/30 rounded-2xl overflow-hidden"
+            exit={{ scale: 0.95, opacity: 0, y: 30 }}
+            className="w-full max-w-md bg-zinc-950 border border-emerald-500/30 rounded-2xl overflow-hidden shadow-[0_0_50px_-12px_rgba(16,185,129,0.25)]"
             style={{ fontFamily: "'JetBrains Mono', 'Fira Code', monospace" }}
           >
             {/* Header */}
             <div className="px-6 py-4 border-b border-emerald-500/15 bg-emerald-500/5 flex items-center gap-3">
               <motion.div
-                animate={{ rotate: done ? 0 : 360 }}
-                transition={{ duration: 2, repeat: done ? 0 : Infinity, ease: 'linear' }}
+                animate={{ rotate: (simulationDone || completed) ? 0 : 360 }}
+                transition={{ duration: 2, repeat: (simulationDone || completed) ? 0 : Infinity, ease: 'linear' }}
               >
                 <SolanaLogo className="w-5 h-5 text-emerald-400" />
               </motion.div>
-              <span className="text-emerald-400 text-sm font-medium">
-                {done ? 'ready_to_execute' : 'preparing_claim...'}
+              <span className="text-emerald-400 text-xs font-semibold tracking-wider uppercase">
+                {completed ? 'transaction_confirmed' : executing ? 'executing_on_chain...' : simulationDone ? 'ready_to_extract' : 'pre_claim_audit...'}
               </span>
-              <motion.div
-                className="ml-auto text-xs text-emerald-400 tabular-nums"
-                animate={{ opacity: [1, 0.4, 1] }}
-                transition={{ duration: 1.2, repeat: done ? 0 : Infinity }}
-              >
-                {progress}%
-              </motion.div>
+              <div className="ml-auto flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${completed ? 'bg-emerald-500' : 'bg-yellow-500 animate-pulse'}`} />
+                <span className="text-[10px] text-emerald-400/70 tabular-nums">{progress}%</span>
+              </div>
             </div>
 
             {/* Progress bar */}
-            <div className="h-1 bg-black/60 relative overflow-hidden">
+            <div className="h-1 bg-white/5 relative overflow-hidden">
               <motion.div
-                className="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-600 to-emerald-400"
+                className="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-600 via-emerald-400 to-emerald-500"
                 initial={{ width: 0 }}
                 animate={{ width: `${progress}%` }}
-                transition={{ duration: 0.5, ease: 'easeOut' }}
+                transition={{ duration: 0.5 }}
               />
-              {!done && (
-                <motion.div
-                  className="absolute inset-y-0 w-16 bg-gradient-to-r from-transparent via-emerald-300/50 to-transparent"
-                  animate={{ x: ['-100%', '700%'] }}
-                  transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
-                />
-              )}
             </div>
 
-            {/* Steps */}
-            <div className="px-6 py-5 space-y-3">
-              {STEPS.map((step, i) => {
-                const Icon = step.icon;
-                const isActive = i === currentStep && !done;
-                const isComplete = done || i < currentStep;
-                const isPending = i > currentStep && !done;
-
-                return (
-                  <motion.div
-                    key={step.id}
-                    initial={{ opacity: 0, x: -12 }}
-                    animate={{ opacity: isPending ? 0.3 : 1, x: 0 }}
-                    transition={{ delay: i * 0.06, duration: 0.3 }}
-                    className="flex items-center gap-3"
-                  >
-                    {/* Icon */}
-                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center border flex-shrink-0 ${
-                      isComplete ? 'bg-emerald-500/20 border-emerald-500/50'
-                      : isActive ? 'bg-emerald-500/10 border-emerald-500/30'
-                      : 'bg-black/40 border-white/5'
-                    }`}>
-                      {isComplete ? (
-                        <motion.div
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
-                          transition={{ type: 'spring', stiffness: 400, damping: 15 }}
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                        </motion.div>
-                      ) : isActive ? (
-                        <Loader2 className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
-                      ) : (
-                        <Icon className="w-3.5 h-3.5 text-slate-600" />
-                      )}
+            <div className="p-6">
+              {!completed ? (
+                <>
+                  {/* Steps List */}
+                  {!executing && (
+                    <div className="space-y-3 mb-6">
+                      {STEPS.map((step, i) => {
+                        const Icon = step.icon;
+                        const isActive = i === currentStep && !simulationDone;
+                        const isComplete = simulationDone || i < currentStep;
+                        return (
+                          <motion.div key={step.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-3">
+                            <div className={`w-6 h-6 rounded border flex items-center justify-center ${isComplete ? 'bg-emerald-500/20 border-emerald-500/50' : isActive ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-white/5 border-white/5 opacity-30'}`}>
+                              {isComplete ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> : <Icon className="w-3 h-3 text-slate-500" />}
+                            </div>
+                            <span className={`text-[11px] ${isComplete ? 'text-emerald-400' : isActive ? 'text-white' : 'text-slate-600'}`}>{step.label}</span>
+                          </motion.div>
+                        );
+                      })}
                     </div>
+                  )}
 
-                    {/* Label */}
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-xs font-medium ${isComplete ? 'text-emerald-400' : isActive ? 'text-white' : 'text-slate-600'}`}>
-                        {step.label}
-                      </p>
-                      {isActive && (
-                        <motion.p
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          className="text-[10px] text-emerald-500/60 mt-0.5 truncate"
-                        >
-                          {step.sublabel}
-                        </motion.p>
-                      )}
-                      {isComplete && (
-                        <motion.p
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          className="text-[10px] text-emerald-500/50 mt-0.5"
-                        >
-                          ✓ complete
-                        </motion.p>
-                      )}
-                    </div>
-
-                    {/* Active pulse dot */}
-                    {isActive && (
-                      <motion.div
-                        className="w-1.5 h-1.5 rounded-full bg-emerald-400"
-                        animate={{ opacity: [1, 0.2, 1] }}
-                        transition={{ duration: 0.8, repeat: Infinity }}
-                      />
-                    )}
-                  </motion.div>
-                );
-              })}
-            </div>
-
-            {/* Summary + CTA */}
-            <AnimatePresence>
-              {done && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="px-6 pb-6 space-y-4"
-                >
-                  {/* Summary box */}
-                  <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4 flex items-center justify-between">
-                    <div>
-                      <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">ready to claim</p>
-                      <div className="flex items-center gap-1.5">
-                        <SolanaLogo className="w-4 h-4 text-emerald-400" />
-                        <span className="text-xl font-semibold text-emerald-400 tabular-nums">
-                          +{totalSol.toFixed(4)} SOL
-                        </span>
+                  {executing && (
+                    <div className="py-8 text-center space-y-4">
+                      <Loader2 className="w-10 h-10 text-emerald-400 animate-spin mx-auto opacity-50" />
+                      <div className="space-y-1">
+                        <p className="text-sm text-white font-bold">Broadcasting Transaction</p>
+                        <p className="text-[10px] text-slate-500">Waiting for Solana cluster confirmation...</p>
                       </div>
-                      <p className="text-[10px] text-slate-600 mt-0.5">{totalAccounts} accounts · 1 wallet popup</p>
                     </div>
-                    <motion.div
-                      animate={{ scale: [1, 1.1, 1] }}
-                      transition={{ duration: 1.5, repeat: Infinity }}
-                      className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center"
-                    >
-                      <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+                  )}
+
+                  {/* Summary & Warnings */}
+                  {simulationDone && !executing && (
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+                      {isUnprofitable && (
+                        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 flex items-start gap-3">
+                          <Shield className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-[10px] text-amber-500 font-bold uppercase tracking-tight">low_yield_warning</p>
+                            <p className="text-[10px] text-amber-500/80 leading-relaxed">Reclaimed SOL (+{totalSol.toFixed(4)}) is less than the service fee (0.299). You will have a net loss of ≈{(0.299 - totalSol).toFixed(4)} SOL.</p>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4">
+                        <div className="flex justify-between items-end">
+                          <div>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">net_extraction</p>
+                            <div className="flex items-center gap-2">
+                              <SolanaLogo className="w-5 h-5 text-emerald-400" />
+                              <span className={`text-2xl font-bold tabular-nums ${isUnprofitable ? 'text-amber-400' : 'text-emerald-400'}`}>
+                                {totalSol.toFixed(4)} SOL
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">accounts</p>
+                            <p className="text-lg font-mono text-white">{totalAccounts}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-3">
+                        <button onClick={onCancel} className="flex-1 px-4 py-3 rounded-xl border border-white/10 text-slate-500 text-xs font-bold hover:bg-white/5 transition-all">cancel</button>
+                        <button onClick={onProceed} className="flex-1 px-4 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs shadow-[0_0_20px_-5px_rgba(16,185,129,0.5)] transition-all flex items-center justify-center gap-2">
+                          <Zap className="w-4 h-4" />
+                          EXTRACT SOL
+                        </button>
+                      </div>
                     </motion.div>
+                  )}
+                </>
+              ) : (
+                /* SUCCESS VIEW */
+                <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="py-4 text-center space-y-6">
+                  <div className="relative inline-block">
+                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', damping: 12 }} className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center border-2 border-emerald-500/50 mx-auto">
+                      <CheckCircle2 className="w-10 h-10 text-emerald-400" />
+                    </motion.div>
+                    <motion.div animate={{ scale: [1, 1.5, 1], opacity: [0.5, 0, 0.5] }} transition={{ duration: 2, repeat: Infinity }} className="absolute inset-0 bg-emerald-400/20 rounded-full" />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <h2 className="text-xl font-bold text-white">Claim Successful!</h2>
+                    <p className="text-xs text-slate-400">Your SOL has been reclaimed and sent to your wallet.</p>
                   </div>
 
-                  {/* Buttons */}
-                  <div className="flex gap-3">
-                    <button
-                      onClick={onCancel}
-                      className="flex-1 px-4 py-2.5 rounded-lg border border-white/10 text-slate-500 text-xs font-mono hover:border-white/20 hover:text-slate-300 transition-all"
-                    >
-                      cancel
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 inline-flex items-center gap-3 mx-auto">
+                    <SolanaLogo className="w-5 h-5" />
+                    <span className="text-xl font-bold text-emerald-400">+{totalSol.toFixed(4)} SOL</span>
+                  </div>
+
+                  <div className="flex flex-col gap-3">
+                    {signature && (
+                      <a 
+                        href={`https://solscan.io/tx/${signature}`} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="w-full px-4 py-3 rounded-xl border border-emerald-500/30 text-emerald-400 text-xs font-bold hover:bg-emerald-500/10 transition-all flex items-center justify-center gap-2"
+                      >
+                        <Search className="w-4 h-4" />
+                        VIEW ON SOLSCAN
+                      </a>
+                    )}
+                    <button onClick={onCancel} className="w-full px-4 py-3 rounded-xl bg-white text-black font-bold text-xs hover:bg-zinc-200 transition-all">
+                      BACK TO SCANNER
                     </button>
-                    <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={onProceed}
-                      className="flex-1 px-4 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-mono font-bold text-xs transition-all flex items-center justify-center gap-2"
-                    >
-                      <Zap className="w-3.5 h-3.5" />
-                      execute_claim
-                    </motion.button>
                   </div>
                 </motion.div>
               )}
-            </AnimatePresence>
+            </div>
           </motion.div>
         </motion.div>
       )}
