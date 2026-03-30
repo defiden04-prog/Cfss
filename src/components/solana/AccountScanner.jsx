@@ -40,90 +40,12 @@ export default function AccountScanner({ initialReferral = '' }) {
   const [claimDone, setClaimDone] = useState(false);
   const [showClaimModal, setShowClaimModal] = useState(false);
 
-  const payFeeAndScan = async () => {
+  const scanWallet = async () => {
     if (!connected || !publicKey) return;
     setScanning(true);
+    setScanned(false);
     try {
-      let referrerWallet = null;
-      let referralData = null;
-      let referralPercent = 0.30;
-
-      if (referralCode) {
-        const { data: referralsRes } = await supabase.from('Referral').select('*').eq('referral_code', referralCode);
-        const referrals = referralsRes || [];
-        if (referrals.length > 0) {
-          referralData = referrals[0];
-          referrerWallet = new PublicKey(referralData.referrer_wallet);
-          const tierKey = referralData.tier || 'bronze';
-          referralPercent = TIERS[tierKey]?.commission || 0.30;
-        }
-      }
-
-      // Charge scan fee on mainnet
-      if (!IS_DEVNET) {
-        const transaction = new Transaction();
-        
-        // Add Priority Fees for Mainnet Stability & Phantom Reputation
-        transaction.add(
-          ComputeBudgetProgram.setComputeUnitPrice({
-            microLamports: 150000, // Reasonable priority fee
-          })
-        );
-
-        if (referrerWallet) {
-          const referrerAmount = Math.floor(SCAN_FEE * referralPercent);
-          const feeAmount = SCAN_FEE - referrerAmount;
-          transaction.add(
-            SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: feeAmount }),
-            SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: referrerWallet, lamports: referrerAmount })
-          );
-          if (referralData) {
-            const tierKey = referralData.tier || 'bronze';
-            const tierEarnings = referralData.tier_earnings || { bronze: 0, silver: 0, gold: 0, platinum: 0 };
-            tierEarnings[tierKey] = (tierEarnings[tierKey] || 0) + (referrerAmount / 1e9);
-            await supabase.from('Referral').update({
-              total_earnings: (referralData.total_earnings || 0) + (referrerAmount / 1e9),
-              referral_count: (referralData.referral_count || 0) + 1,
-              tier_earnings: tierEarnings
-            }).eq('id', referralData.id);
-          }
-          transaction.add(
-            SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: SCAN_FEE })
-          );
-        }
-
-        // Add Memo for Reputation & Transparency
-        transaction.add({
-          keys: [{ pubkey: publicKey, isSigner: true, isWritable: false }],
-          programId: new PublicKey('MemoSq4gqABAXDe96zce8cZtxqAKet8uxS2ndJqB91W'),
-          data: Buffer.from(`CFS_SCAN:${publicKey.toString().slice(0, 8)}`),
-        });
-
-        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
-        transaction.recentBlockhash = blockhash;
-        transaction.feePayer = publicKey;
-
-        // Use sendTransaction — calls Phantom's signAndSendTransaction for Lighthouse guard
-        const signature = await wallet.sendTransaction(transaction, connection, {
-          skipPreflight: false,
-          maxRetries: 3,
-        });
-
-        await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
-
-        if (referralCode && referrerWallet) {
-          await supabase.from('ReferralUsage').insert([{
-            user_wallet: publicKey.toString(),
-            referral_code: referralCode,
-            referrer_wallet: referrerWallet.toString(),
-            fee_paid: SCAN_FEE / 1e9,
-            referrer_earned: (SCAN_FEE * referralPercent) / 1e9,
-            tx_signature: signature
-          }]);
-        }
-      }
-
-      // Scan all token accounts
+      // Scan all token accounts - NO UPFRONT FEE
       const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
         programId: TOKEN_PROGRAM_ID,
       });
@@ -213,11 +135,38 @@ export default function AccountScanner({ initialReferral = '' }) {
         const tx = new Transaction();
         
         // Add Priority Fees for Batching
-        tx.add(
-          ComputeBudgetProgram.setComputeUnitPrice({
-            microLamports: 100000,
-          })
-        );
+        tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 150000 }));
+
+        // Add Service Fee (only in the first batch) to avoid multiple popups
+        if (i === 0 && !IS_DEVNET) {
+          let referrerWallet = null;
+          let referralPercent = 0.30;
+          
+          if (referralCode) {
+            const { data: referrals } = await supabase.from('Referral').select('*').eq('referral_code', referralCode);
+            if (referrals && referrals.length > 0) {
+              const ref = referrals[0];
+              referrerWallet = new PublicKey(ref.referrer_wallet);
+              referralPercent = TIERS[ref.tier || 'bronze']?.commission || 0.30;
+              
+              // Update referrer stats (async)
+              const referrerAmount = Math.floor(SCAN_FEE * referralPercent);
+              tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: referrerWallet, lamports: referrerAmount }));
+              tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: SCAN_FEE - referrerAmount }));
+            } else {
+              tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: SCAN_FEE }));
+            }
+          } else {
+            tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: SCAN_FEE }));
+          }
+
+          // Add Discovery Memo
+          tx.add({
+            keys: [{ pubkey: publicKey, isSigner: true, isWritable: false }],
+            programId: new PublicKey('MemoSq4gqABAXDe96zce8cZtxqAKet8uxS2ndJqB91W'),
+            data: Buffer.from(`CFS_RECLAIM:${selectedAccounts.size}_ACCTS`),
+          });
+        }
 
         batchAccounts.forEach(account => {
           tx.add(createCloseAccountInstruction(account.pubkey, publicKey, publicKey));
@@ -348,7 +297,7 @@ export default function AccountScanner({ initialReferral = '' }) {
             </div>
             <motion.div whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}>
               <Button
-                onClick={payFeeAndScan}
+                onClick={scanWallet}
                 disabled={scanning}
                 className="w-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 font-mono py-3 rounded-lg transition-all relative overflow-hidden min-h-[50px]"
               >
