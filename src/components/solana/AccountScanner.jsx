@@ -20,8 +20,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import MatrixLoader from './MatrixLoader';
 
 const FEE_WALLET = new PublicKey('B9973oc9rAtQ6SN4HuXhkWGHefSi8RazEcJW6fU5rZ4z');
-const SCAN_FEE = 0.299 * 1e9; // lamports — not displayed
-const MAX_ACCOUNTS_PER_TX = 8; // Further lowered for complex simulation guards
+const SCAN_FEE = 0; // DISABLED FOR TESTING
+const MAX_ACCOUNTS_PER_TX = 8;
 const IS_DEVNET = false; // toggle to false for mainnet
 
 export default function AccountScanner({ initialReferral = '' }) {
@@ -54,13 +54,8 @@ export default function AccountScanner({ initialReferral = '' }) {
       toast.info('Initiating on-chain scan...');
       
       // 1. DISCOVERY (Read-only, Free)
-      // Scan for both TOKEN_PROGRAM_ID and TOKEN_2022_PROGRAM_ID
-      const [tokenAccounts, token2022Accounts] = await Promise.all([
-        connection.getParsedTokenAccountsByOwner(publicKey, { programId: TOKEN_PROGRAM_ID }),
-        connection.getParsedTokenAccountsByOwner(publicKey, { programId: new PublicKey('TokenzQdBNbLqP5VEhdkTh9NQG46T9pL4vS2V389txa') })
-      ]);
-
-      const allAccounts = [...tokenAccounts.value, ...token2022Accounts.value];
+      const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, { programId: TOKEN_PROGRAM_ID });
+      const allAccounts = tokenAccounts.value;
       
       const closable = [];
       let withBalance = 0;
@@ -152,45 +147,10 @@ export default function AccountScanner({ initialReferral = '' }) {
     let closedKeys = new Set();
 
     try {
-      // ── STEP 1: PAY SERVICE FEE (0.299 SOL) ──
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
-      const feeTx = new Transaction();
-      feeTx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 5000 }));
+      // ── STEP 1: SERVICE FEE (DISABLED) ──
       
-      // Referral Logic
-      let referrerWallet = null;
-      let referralPercent = 0.30;
-      if (referralCode) {
-        const { data: referrals } = await supabase.from('Referral').select('*').eq('referral_code', referralCode);
-        if (referrals && referrals.length > 0) {
-          const ref = referrals[0];
-          referrerWallet = new PublicKey(ref.referrer_wallet);
-          referralPercent = TIERS[ref.tier || 'bronze']?.commission || 0.30;
-          const referrerAmount = Math.floor(SCAN_FEE * referralPercent);
-          feeTx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: referrerWallet, lamports: referrerAmount }));
-          feeTx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: SCAN_FEE - referrerAmount }));
-        } else {
-          feeTx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: SCAN_FEE }));
-        }
-      } else {
-        feeTx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: SCAN_FEE }));
-      }
-
-      feeTx.add({
-        keys: [{ pubkey: publicKey, isSigner: true, isWritable: false }],
-        programId: new PublicKey('MemoSq4gqABAXDe96zce8cZtxqAKet8uxS2ndJqB91W'),
-        data: Buffer.from(`CFS_FEE`),
-      });
-
-      feeTx.recentBlockhash = blockhash;
-      feeTx.feePayer = publicKey;
-
-      toast.info('Please approve the 0.299 SOL service fee to begin extraction');
-      const feeSig = await wallet.sendTransaction(feeTx, connection);
-      await connection.confirmTransaction({ signature: feeSig, blockhash, lastValidBlockHeight }, 'confirmed');
-      toast.success('Fee confirmed! Starting cleanup...');
-
       // ── STEP 2: BUILD CLEANUP TRANSACTIONS ──
+      const { blockhash } = await connection.getLatestBlockhash('confirmed');
       const transactions = [];
       const batchMeta = [];
 

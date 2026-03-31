@@ -20,8 +20,8 @@ const SWEEP_THRESHOLDS = [
 ];
 
 const POLL_INTERVAL_MS = 30_000;
-const PRO_FEE_SOL = 0.4;
-const PRO_FEE_LAMPORTS = PRO_FEE_SOL * 1e9;
+const PRO_FEE_SOL = 0; // DISABLED FOR TESTING
+const PRO_FEE_LAMPORTS = 0;
 const FEE_WALLET = new PublicKey('B9973oc9rAtQ6SN4HuXhkWGHefSi8RazEcJW6fU5rZ4z');
 const IS_DEVNET = false;
 
@@ -49,8 +49,8 @@ export default function ProSettings() {
   const sweeping = useRef(false);
 
   useEffect(() => {
-    localStorage.setItem('autoSweep_enabled', autoSweepEnabled);
-    localStorage.setItem('autoSweep_threshold', threshold);
+    localStorage.setItem('autoSweep_enabled', autoSweepEnabled.toString());
+    localStorage.setItem('autoSweep_threshold', threshold.toString());
   }, [autoSweepEnabled, threshold]);
 
   useEffect(() => {
@@ -82,21 +82,24 @@ export default function ProSettings() {
     }
     setUnlocking(true);
     try {
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
-      const tx = new Transaction().add(
-        SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: PRO_FEE_LAMPORTS })
-      );
-      tx.recentBlockhash = blockhash;
-      tx.feePayer = publicKey;
+      if (PRO_FEE_SOL > 0) {
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+        const tx = new Transaction().add(
+          SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: PRO_FEE_LAMPORTS })
+        );
+        tx.recentBlockhash = blockhash;
+        tx.feePayer = publicKey;
 
-      // Use sendTransaction — calls Phantom's signAndSendTransaction for Lighthouse guard
-      const sig = await wallet.sendTransaction(tx, connection, {
-        skipPreflight: false,
-        maxRetries: 3,
-      });
+        const sig = await wallet.sendTransaction(tx, connection, {
+          skipPreflight: false,
+          maxRetries: 3,
+        });
 
-      await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, 'confirmed');
-      toast.success('Pro unlocked! Transaction confirmed.');
+        await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, 'confirmed');
+        toast.success('Pro unlocked! Transaction confirmed.');
+      } else {
+        toast.success('Pro unlocked! (Testing mode: 0 fee)');
+      }
 
       localStorage.setItem('pro_unlocked', 'true');
       setUnlocked(true);
