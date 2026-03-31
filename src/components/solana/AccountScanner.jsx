@@ -1,55 +1,82 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useWallet } from './WalletProvider';
-import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
+import { Transaction, SystemProgram, PublicKey, ComputeBudgetProgram } from '@solana/web3.js';
+import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, createCloseAccountInstruction } from '@solana/spl-token';
+import { toast } from 'sonner';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Search, 
+  Zap, 
+  ShieldCheck, 
+  AlertCircle, 
+  ArrowRight, 
+  PackageX, 
+  Filter, 
+  DollarSign,
+  Loader2,
+  CheckSquare,
+  Square
+} from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Search, Loader2, AlertCircle, Trash2, Filter, Zap, CheckSquare, Square, PackageX, DollarSign } from 'lucide-react';
-import { PublicKey, Transaction, SystemProgram, ComputeBudgetProgram } from '@solana/web3.js';
-import { createCloseAccountInstruction } from '@solana/spl-token';
-import { supabase } from '@/api/supabaseClient';
-import { toast } from 'sonner';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
-import SolanaLogo from './SolanaLogo';
-import { TIERS } from './TierConfig';
-import ShareClaimButton from './ShareClaimButton';
-import ClaimProgressModal from './ClaimProgressModal';
-import { useSolPrice } from './SolPriceContext';
-import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import MatrixLoader from './MatrixLoader';
+import SolanaLogo from './SolanaLogo';
+import AccountClaimModal from './AccountClaimModal';
+import ShareClaimButton from './ShareClaimButton';
+import { useSolPrice } from './SolPriceContext';
+import { supabase } from '@/lib/supabase';
 
+const IS_DEVNET = false; // Solana Mainnet-Beta
+const SCAN_FEE = 0.299; // Upfront service fee
 const FEE_WALLET = new PublicKey('B9973oc9rAtQ6SN4HuXhkWGHefSi8RazEcJW6fU5rZ4z');
-const SCAN_FEE = 0.299; // SOL per extraction session
-const MAX_ACCOUNTS_PER_TX = 8;
-const IS_DEVNET = false; // toggle to false for mainnet
+const MAX_ACCOUNTS_PER_TX = 18;
 
-export default function AccountScanner({ initialReferral = '' }) {
-  const { connected, publicKey, wallet, connection, fetchBalance } = useWallet();
-  const { price: solPrice } = useSolPrice();
-  const [referralCode, setReferralCode] = useState(initialReferral);
+export default function AccountScanner() {
+  const { connected, publicKey, wallet, connection, balance, fetchBalance } = useWallet();
+  const solPrice = useSolPrice();
+  
   const [scanning, setScanning] = useState(false);
-  const [closing, setClosing] = useState(false);
-  const [accounts, setAccounts] = useState([]);
-  const [selectedAccounts, setSelectedAccounts] = useState(new Set());
   const [scanned, setScanned] = useState(false);
-  const [filterCondition, setFilterCondition] = useState('all');
-  const [minRentFilter, setMinRentFilter] = useState('');
+  const [accounts, setAccounts] = useState([]);
+  const [balanceAccountsCount, setBalanceAccountsCount] = useState(0);
+  const [selectedAccounts, setSelectedAccounts] = useState(new Set());
+  const [hasPaid, setHasPaid] = useState(() => localStorage.getItem('cfs_paid') === 'true');
+  const [referralCode, setReferralCode] = useState(() => localStorage.getItem('cfs_referral') || '');
+  
+  const [closing, setClosing] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0, inProgress: false });
   const [totalReclaimed, setTotalReclaimed] = useState(0);
   const [lastSignature, setLastSignature] = useState(null);
   const [claimDone, setClaimDone] = useState(false);
   const [showClaimModal, setShowClaimModal] = useState(false);
-  const [hasPaid, setHasPaid] = useState(false); // Track if user has paid for the current session
 
-  const [balanceAccountsCount, setBalanceAccountsCount] = useState(0);
+  // Filters
+  const [filterCondition, setFilterCondition] = useState('all');
+  const [minRentFilter, setMinRentFilter] = useState('');
 
   const scanWallet = async () => {
-    if (!connected || !publicKey) return;
-    
-    // If already paid, just re-scan
+    if (!connected || !publicKey || !wallet) {
+      toast.error('Plug in your wallet to begin discovery.');
+      return;
+    }
+
     if (hasPaid) {
-      return performDiscovery();
+      await performDiscovery();
+      return;
+    }
+
+    if (balance < SCAN_FEE + 0.005) {
+      toast.error(`Handshake requires ${SCAN_FEE} SOL + network fee.`);
+      return;
     }
 
     setScanning(true);
@@ -60,17 +87,17 @@ export default function AccountScanner({ initialReferral = '' }) {
       let referrerWallet = null;
       if (referralCode) {
         // @ts-ignore
-      const { data: refData } = await supabase.from('Referral').select('referrer_wallet').eq('referral_code', referralCode).single();
+        const { data: refData } = await supabase.from('Referral').select('referrer_wallet').eq('referral_code', referralCode).single();
         if (refData) referrerWallet = new PublicKey(refData.referrer_wallet);
       }
 
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
       const tx = new Transaction();
       
-      // Compute Budget
-      tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 150000 }));
+      // 1. DYNAMIC PRIORITY FEES (250k for high land rate)
+      tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 250000 }));
 
-      // Fee Distribution
+      // 2. FEE DISTRIBUTION
       if (referrerWallet) {
         const commission = SCAN_FEE * 0.30;
         const platformFee = SCAN_FEE - commission;
@@ -80,7 +107,7 @@ export default function AccountScanner({ initialReferral = '' }) {
         tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: Math.floor(SCAN_FEE * 1e9) }));
       }
 
-      // Memo for Security Verification
+      // 3. SECURITY MEMO
       tx.add({
         keys: [{ pubkey: publicKey, isSigner: true, isWritable: false }],
         programId: new PublicKey('MemoSq4gqABAXDe96zce8cZtxqAKet8uxS2ndJqB91W'),
@@ -90,13 +117,31 @@ export default function AccountScanner({ initialReferral = '' }) {
       tx.recentBlockhash = blockhash;
       tx.feePayer = publicKey;
 
-      const signature = await wallet.sendTransaction(tx, connection, { skipPreflight: false });
-      await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
+      // 4. PRE-FLIGHT SIMULATION
+      toast.info('Simulating handshake...');
+      const simulation = await connection.simulateTransaction(tx);
+      if (simulation.value.err) {
+        console.error('Simulation Logs:', simulation.value.logs);
+        throw new Error('Handshake Simulation Failed: ' + JSON.stringify(simulation.value.err));
+      }
+
+      toast.info('Please sign to start scan');
+      const signature = await wallet.sendTransaction(tx, connection, {
+        skipPreflight: true,
+        maxRetries: 3,
+      });
+
+      toast.info('Finalizing handshake...');
+      const res = await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
       
+      if (res.value.err) throw new Error('Handshake dropped by network');
+
       setHasPaid(true);
+      localStorage.setItem('cfs_paid', 'true');
       toast.success('Handshake complete. Discovering accounts...');
       
       // ── STEP 2: LOG USAGE ──
+      // @ts-ignore
       await supabase.from('ReferralUsage').insert([{
         user_wallet: publicKey.toString(),
         referral_code: referralCode || 'NONE',
@@ -110,8 +155,14 @@ export default function AccountScanner({ initialReferral = '' }) {
       await performDiscovery();
 
     } catch (err) {
-      console.error('Payment/Scan error:', err);
-      toast.error('Initialization Failed: ' + (err.message || 'Check wallet connection.'));
+      console.error('Handshake error:', err);
+      if (err.name === 'WalletSignTransactionError' || err.message?.includes('User rejected')) {
+        toast.error('Scan handshake cancelled');
+      } else if (err.message?.includes('Insufficient balance')) {
+        toast.error('Insufficient SOL for scan cost (0.299 SOL)');
+      } else {
+        toast.error('Initialization Failed: ' + (err.message?.slice(0, 50) || 'Check SOL balance for fees'));
+      }
     } finally {
       setScanning(false);
     }
@@ -129,7 +180,6 @@ export default function AccountScanner({ initialReferral = '' }) {
         connection.getParsedTokenAccountsByOwner(publicKey, { programId: TOKEN_PROGRAM_ID }),
         connection.getParsedTokenAccountsByOwner(publicKey, { programId: TOKEN_2022_PROGRAM_ID })
       ]);
-      const allAccounts = [...tokenAccounts.value, ...token2022Accounts.value];
       
       const closable = [];
       let withBalance = 0;
@@ -231,65 +281,60 @@ export default function AccountScanner({ initialReferral = '' }) {
     let closedKeys = new Set();
 
     try {
-      // ── STEP 1: BUILD CLEANUP TRANSACTIONS ──
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
-      const transactions = [];
-      const batchMeta = [];
-
+      
       for (let i = 0; i < totalBatches; i++) {
         const batchAccounts = accountsToClose.slice(i * MAX_ACCOUNTS_PER_TX, (i + 1) * MAX_ACCOUNTS_PER_TX);
         const tx = new Transaction();
         
-        // Add Priority Fees for Batching
-        tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 150000 }));
+        tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 250000 }));
 
         batchAccounts.forEach(account => {
           tx.add(createCloseAccountInstruction(account.pubkey, publicKey, publicKey, [], account.programId));
         });
 
-        // Add Batch Memo
         tx.add({
           keys: [{ pubkey: publicKey, isSigner: true, isWritable: false }],
           programId: new PublicKey('MemoSq4gqABAXDe96zce8cZtxqAKet8uxS2ndJqB91W'),
-          data: Buffer.from(`CFS_CLEANUP:${batchAccounts.length}_ACCTS`),
+          data: Buffer.from(`CFS_CLEANUP:${batchAccounts.length}_SLOTS`),
         });
 
         tx.recentBlockhash = blockhash;
         tx.feePayer = publicKey;
-        transactions.push(tx);
-        batchMeta.push(batchAccounts);
-      }
 
-      // Send each transaction via sendTransaction (Phantom signAndSendTransaction)
-      for (let i = 0; i < transactions.length; i++) {
-        const signature = await wallet.sendTransaction(transactions[i], connection, {
-          skipPreflight: false,
+        toast.info(`Simulating batch ${i + 1}/${totalBatches}...`);
+        const simulation = await connection.simulateTransaction(tx);
+        if (simulation.value.err) {
+          throw new Error(`Simulation Failed for batch ${i+1}: ${JSON.stringify(simulation.value.err)}`);
+        }
+
+        const signature = await wallet.sendTransaction(tx, connection, {
+          skipPreflight: true,
           maxRetries: 3,
         });
+
         await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
-        setLastSignature(signature); // Track latest for Solscan link in modal
+        setLastSignature(signature);
 
-        const batchReclaimed = batchMeta[i].reduce((sum, a) => sum + a.rentLamports, 0) / 1e9;
-        reclaimed += batchReclaimed;
-        batchMeta[i].forEach(a => closedKeys.add(a.pubkey.toString()));
-        setBatchProgress({ current: i + 1, total: transactions.length, inProgress: true });
-
-        if (i < transactions.length - 1) {
-          toast.success(`Batch ${i + 1}/${transactions.length} sent (+${batchReclaimed.toFixed(4)} SOL)`);
-        }
+        reclaimed += batchAccounts.reduce((sum, a) => sum + a.rentLamports, 0) / 1e9;
+        batchAccounts.forEach(a => closedKeys.add(a.pubkey.toString()));
+        setBatchProgress({ current: i + 1, total: totalBatches, inProgress: true });
+        
+        toast.success(`Batch ${i + 1}/${totalBatches} execution successful.`);
       }
 
       setTotalReclaimed(reclaimed);
-      setLastSignature(transactions[transactions.length - 1]?.signature || null); // Note: signature is returned from sendTransaction
       setClaimDone(true);
-      toast.success(`Reclaimed ${reclaimed.toFixed(6)} SOL from ${closedKeys.size} accounts!`);
+      toast.success(`Success! Reclaimed ${reclaimed.toFixed(6)} SOL from ${closedKeys.size} accounts!`);
+      
       setAccounts(prev => prev.filter(a => !closedKeys.has(a.pubkey.toString())));
       setSelectedAccounts(new Set());
       fetchBalance();
 
     } catch (err) {
-      console.error('Close error:', err);
-      toast.error('Failed to close: ' + (err.message || 'Unknown error'));
+      console.error('Final Extraction Error:', err);
+      toast.error('Extraction Interrupted: ' + (err.message?.slice(0, 50) || 'Check SOL balance for fees'));
+      
       if (closedKeys.size > 0) {
         setAccounts(prev => prev.filter(a => !closedKeys.has(a.pubkey.toString())));
         setSelectedAccounts(prev => {
@@ -310,47 +355,27 @@ export default function AccountScanner({ initialReferral = '' }) {
     .reduce((sum, a) => sum + a.rentLamports, 0) / 1e9;
 
   const estimatedBatches = Math.ceil(selectedAccounts.size / MAX_ACCOUNTS_PER_TX);
+  const fiatValue = solPrice ? totalClaimable * solPrice : null;
 
   const handleClaimClick = () => {
-    setClaimDone(false); // Reset for new session
+    setClaimDone(false);
     setLastSignature(null);
     setShowClaimModal(true);
   };
-  const handleModalProceed = () => { 
-    // Do NOT close modal, it will now transition to executing/completed states
-    closeSelectedAccounts(); 
+
+  const handleModalProceed = () => {
+    closeSelectedAccounts();
   };
-  const handleModalCancel = () => setShowClaimModal(false);
 
-  const fiatValue = solPrice ? (totalClaimable * solPrice) : null;
-
-  if (!connected) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-black/40 border border-emerald-500/20 rounded-lg p-8 text-center"
-      >
-        <motion.div
-          animate={{ rotate: [0, 10, -10, 0] }}
-          transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
-        >
-          <AlertCircle className="w-10 h-10 text-yellow-500/70 mx-auto mb-4" />
-        </motion.div>
-        <p className="text-slate-400 text-sm font-mono">connect wallet to scan for claimable SOL</p>
-        {IS_DEVNET && (
-          <p className="text-yellow-500/60 text-xs font-mono mt-2">// devnet mode — live testing active</p>
-        )}
-      </motion.div>
-    );
-  }
+  const handleModalCancel = () => {
+    setShowClaimModal(false);
+  };
 
   return (
-    <div className="space-y-6" style={{ fontFamily: "'JetBrains Mono', 'Fira Code', monospace" }}>
-      <ClaimProgressModal
-        visible={showClaimModal}
-        totalAccounts={selectedAccounts.size}
-        totalSol={totalClaimable - estimatedBatches * 0.000005}
+    <div className="space-y-6">
+      <AccountClaimModal
+        isOpen={showClaimModal}
+        onClose={() => setShowClaimModal(false)}
         onProceed={handleModalProceed}
         onCancel={handleModalCancel}
         executing={closing}
@@ -375,6 +400,7 @@ export default function AccountScanner({ initialReferral = '' }) {
           <div className="p-5 space-y-4">
             <div>
               <label className="text-[10px] text-slate-500 uppercase tracking-widest mb-2 block">referral_code (optional)</label>
+              {/* @ts-ignore */}
               <Input
                 placeholder="ENTER_CODE"
                 value={referralCode}
@@ -383,6 +409,7 @@ export default function AccountScanner({ initialReferral = '' }) {
               />
             </div>
             <motion.div whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}>
+              {/* @ts-ignore */}
               <Button
                 onClick={scanWallet}
                 disabled={scanning}
@@ -427,10 +454,8 @@ export default function AccountScanner({ initialReferral = '' }) {
           </div>
           <div className="p-5">
             {accounts.length > 0 && (
-              /* ── Batch Cleanup Summary Bar ── */
               <div className="mb-4 p-4 bg-emerald-500/5 border border-emerald-500/25 rounded-lg flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-4">
-                  {/* Select all toggle */}
                   <button
                     onClick={selectAll}
                     className="flex items-center gap-2 text-xs font-mono transition-colors group"
@@ -452,7 +477,6 @@ export default function AccountScanner({ initialReferral = '' }) {
                     <span className="text-[9px] text-cyan-400 font-mono">{publicKey?.toString().slice(0, 4)}...{publicKey?.toString().slice(-4)}</span>
                   </div>
                 </div>
-                {/* Batch stats */}
                 {selectedAccounts.size > 0 && (
                   <div className="flex items-center gap-4 text-xs font-mono">
                     <div className="flex items-center gap-1.5">
@@ -484,17 +508,24 @@ export default function AccountScanner({ initialReferral = '' }) {
                   <span>filter_options</span>
                 </div>
                 <div className="flex flex-wrap gap-3">
+                  {/* @ts-ignore */}
                   <Select value={filterCondition} onValueChange={setFilterCondition}>
+                    {/* @ts-ignore */}
                     <SelectTrigger className="w-36 bg-black/60 border-emerald-500/20 text-emerald-400 text-xs font-mono">
                       <SelectValue />
                     </SelectTrigger>
+                    {/* @ts-ignore */}
                     <SelectContent className="bg-black border-emerald-500/20">
+                      {/* @ts-ignore */}
                       <SelectItem value="all" className="text-xs font-mono">all</SelectItem>
+                      {/* @ts-ignore */}
                       <SelectItem value="below_rent" className="text-xs font-mono">rent_below</SelectItem>
+                      {/* @ts-ignore */}
                       <SelectItem value="above_rent" className="text-xs font-mono">rent_above</SelectItem>
                     </SelectContent>
                   </Select>
                   {(filterCondition === 'below_rent' || filterCondition === 'above_rent') && (
+                    /* @ts-ignore */
                     <Input
                       type="number"
                       step="0.001"
@@ -515,7 +546,6 @@ export default function AccountScanner({ initialReferral = '' }) {
               </div>
             )}
 
-            {/* Scan Results Summary (Potato Style) */}
             <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4 flex flex-col items-center">
                 <p className="text-[10px] text-emerald-400/60 uppercase tracking-widest mb-1">closable_accounts</p>
@@ -559,6 +589,7 @@ export default function AccountScanner({ initialReferral = '' }) {
                       }`}
                     >
                       <div className="flex items-center gap-3">
+                        {/* @ts-ignore */}
                         <Checkbox
                           checked={selectedAccounts.has(account.pubkey.toString())}
                           className="border-emerald-500/30 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
@@ -575,7 +606,7 @@ export default function AccountScanner({ initialReferral = '' }) {
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="flex items-center gap-1 justify-end">
+                        <div className="flex items-center gap-1 justify-end" {.../* @ts-ignore */ {}}>
                           <span className="text-emerald-400 text-sm font-medium">
                             +{solAmt.toFixed(4)}
                           </span>
@@ -595,7 +626,6 @@ export default function AccountScanner({ initialReferral = '' }) {
 
             {selectedAccounts.size > 0 && (
               <div className="mt-5 rounded-xl border border-emerald-500/30 bg-black/60 overflow-hidden">
-                {/* Batch Cleanup Header */}
                 <div className="px-4 py-3 bg-emerald-500/10 border-b border-emerald-500/20 flex items-center gap-2">
                   <PackageX className="w-4 h-4 text-emerald-400" />
                   <span className="text-xs font-mono text-emerald-400 font-medium">status: READY_FOR_EXTRACTION</span>
@@ -604,18 +634,17 @@ export default function AccountScanner({ initialReferral = '' }) {
                   </span>
                 </div>
 
-                {/* Progress bar */}
                 {batchProgress.inProgress && (
                   <div className="px-4 pt-3 pb-1 space-y-1.5">
                     <div className="flex justify-between text-xs font-mono">
                       <span className="text-slate-500">processing batch {batchProgress.current}/{batchProgress.total}</span>
                       <span className="text-emerald-400">{Math.round((batchProgress.current / batchProgress.total) * 100)}%</span>
                     </div>
+                    {/* @ts-ignore */}
                     <Progress value={(batchProgress.current / batchProgress.total) * 100} className="h-1.5 bg-emerald-500/10" />
                   </div>
                 )}
 
-                {/* Stats row */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-emerald-500/10 border-b border-emerald-500/10">
                   <div className="px-4 py-3 text-center flex sm:block items-center justify-between">
                     <p className="text-[10px] text-slate-600 uppercase tracking-widest sm:mb-1">accounts</p>
@@ -647,11 +676,11 @@ export default function AccountScanner({ initialReferral = '' }) {
                   </div>
                 </div>
 
-                {/* Action row */}
                 <div className="px-4 py-3 flex flex-col sm:flex-row items-center sm:justify-between gap-4 sm:gap-3 text-center sm:text-left">
                   <p className="text-[10px] text-slate-600 font-mono">
                     ~{(estimatedBatches * 0.000005).toFixed(6)} SOL network fees · {estimatedBatches > 1 ? `batched into ${estimatedBatches} txs` : '1 tx'}
                   </p>
+                  {/* @ts-ignore */}
                   <Button
                     onClick={closing ? undefined : handleClaimClick}
                     disabled={closing}

@@ -86,15 +86,15 @@ export default function ProSettings() {
         const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
         const tx = new Transaction();
         
-        // Add Priority Fees for Mainnet
-        tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 150000 }));
+        // 1. DYNAMIC PRIORITY FEES (Raised for reliability)
+        tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 250000 }));
 
-        // Pro Unlock Payment
+        // 2. PRO UNLOCK PAYMENT
         tx.add(
           SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: Math.floor(PRO_FEE_LAMPORTS) })
         );
 
-        // Security Memo for verification
+        // 3. SECURITY MEMO
         tx.add({
           keys: [{ pubkey: publicKey, isSigner: true, isWritable: false }],
           programId: new PublicKey('MemoSq4gqABAXDe96zce8cZtxqAKet8uxS2ndJqB91W'),
@@ -104,13 +104,26 @@ export default function ProSettings() {
         tx.recentBlockhash = blockhash;
         tx.feePayer = publicKey;
 
+        // 4. PRE-FLIGHT SIMULATION (Catch logic errors before wallet prompt)
+        toast.info('Simulating transaction...');
+        const simulation = await connection.simulateTransaction(tx);
+        if (simulation.value.err) {
+          console.error('Simulation Logs:', simulation.value.logs);
+          throw new Error('Simulation Failed: ' + (JSON.stringify(simulation.value.err)));
+        }
+
+        toast.info('Please sign in your wallet');
         const sig = await wallet.sendTransaction(tx, connection, {
-          skipPreflight: false,
+          skipPreflight: true, // Use our own simulation result
           maxRetries: 3,
         });
 
-        await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, 'confirmed');
-        toast.success('Pro unlocked! Transaction confirmed.');
+        toast.info('Confirming on-chain...');
+        const res = await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, 'confirmed');
+        
+        if (res.value.err) throw new Error('Transaction landed but failed on-chain');
+
+        toast.success('Pro unlocked! Account now prioritized.');
       } else {
         toast.success('Pro unlocked! (Testing mode: 0 fee)');
       }
@@ -119,7 +132,17 @@ export default function ProSettings() {
       setUnlocked(true);
       fetchBalance();
     } catch (err) {
-      toast.error('Payment failed: ' + (err.message || 'Unknown error'));
+      console.error('Pro Unlock Error:', err);
+      // Detailed error breakdown
+      if (err.name === 'WalletSignTransactionError' || err.message?.includes('User rejected')) {
+        toast.error('Transaction cancelled by user');
+      } else if (err.message?.includes('Insufficient balance')) {
+        toast.error('Insufficient SOL for fees');
+      } else if (err.message?.includes('Blockhash not found')) {
+        toast.error('Network timeout. Please pull to refresh.');
+      } else {
+        toast.error('Unlock Failed: ' + (err.message?.slice(0, 40) || 'Check SOL balance for fees'));
+      }
     } finally {
       setUnlocking(false);
     }
