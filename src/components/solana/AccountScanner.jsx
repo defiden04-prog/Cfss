@@ -46,58 +46,20 @@ export default function AccountScanner({ initialReferral = '' }) {
     setScanning(true);
     setScanned(false);
     try {
-      // 1. PAY SCAN FEE (0.299 SOL) UPFRONT
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
-      const tx = new Transaction();
-      
-      // Priority Fee for smooth processing
-      tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 5000 }));
-      
-      // Referral Logic
-      let referrerWallet = null;
-      let referralPercent = 0.30;
-      if (referralCode) {
-        const { data: referrals } = await supabase.from('Referral').select('*').eq('referral_code', referralCode);
-        if (referrals && referrals.length > 0) {
-          const ref = referrals[0];
-          referrerWallet = new PublicKey(ref.referrer_wallet);
-          referralPercent = TIERS[ref.tier || 'bronze']?.commission || 0.30;
-          const referrerAmount = Math.floor(SCAN_FEE * referralPercent);
-          tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: referrerWallet, lamports: referrerAmount }));
-          tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: SCAN_FEE - referrerAmount }));
-        } else {
-          tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: SCAN_FEE }));
-        }
-      } else {
-        tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: SCAN_FEE }));
-      }
+      // 1. DISCOVERY (Read-only, Free)
+      // Scan for both TOKEN_PROGRAM_ID and TOKEN_2022_PROGRAM_ID for completeness
+      const [tokenAccounts, token2022Accounts] = await Promise.all([
+        connection.getParsedTokenAccountsByOwner(publicKey, { programId: TOKEN_PROGRAM_ID }),
+        connection.getParsedTokenAccountsByOwner(publicKey, { programId: new PublicKey('TokenzQdBNbLqP5VEhdkTh9NQG46T9pL4vS2V389txa') })
+      ]);
 
-      // Add Scan Memo
-      tx.add({
-        keys: [{ pubkey: publicKey, isSigner: true, isWritable: false }],
-        programId: new PublicKey('MemoSq4gqABAXDe96zce8cZtxqAKet8uxS2ndJqB91W'),
-        data: Buffer.from(`CFS_SCAN_INIT`),
-      });
+      const allAccounts = [...tokenAccounts.value, ...token2022Accounts.value];
+      console.log(`[Discovery] Total token accounts found: ${allAccounts.length}`);
 
-      tx.recentBlockhash = blockhash;
-      tx.feePayer = publicKey;
-
-      toast.info('Please approve the transaction to continue');
-      const signature = await wallet.sendTransaction(tx, connection);
-      await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
-      toast.success('Scanning wallet...');
-
-      // 2. DISCOVERY (After payment)
-      const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
-        programId: TOKEN_PROGRAM_ID,
-      });
-
-      console.log(`[Discovery] Total token accounts: ${tokenAccounts.value.length}`);
-
-      const emptyAccounts = tokenAccounts.value
+      const emptyAccounts = allAccounts
         .filter(account => {
           const amount = account.account.data.parsed.info.tokenAmount.uiAmount || 0;
-          // Relax filter: Include accounts with < 0.01 dust as they are effectively empty
+          // Include accounts with < 0.01 dust as they are effectively empty
           return amount < 0.01;
         })
         .map(account => ({
@@ -106,7 +68,7 @@ export default function AccountScanner({ initialReferral = '' }) {
           rentLamports: account.account.lamports,
         }));
 
-      console.log(`[Discovery] Closable accounts found: ${emptyAccounts.length}`);
+      console.log(`[Discovery] Closable accounts filtered: ${emptyAccounts.length}`);
 
       setAccounts(emptyAccounts);
       // Auto-select all
@@ -121,7 +83,7 @@ export default function AccountScanner({ initialReferral = '' }) {
 
     } catch (err) {
       console.error('Scan error:', err);
-      toast.error('Scan Failed: ' + (err.message || 'Unknown error. Check balance?'));
+      toast.error('Scan Failed: ' + (err.message || 'Unknown error.'));
     } finally {
       setScanning(false);
     }
@@ -177,8 +139,45 @@ export default function AccountScanner({ initialReferral = '' }) {
     let closedKeys = new Set();
 
     try {
-      // Build all transactions upfront
+      // ── STEP 1: PAY SERVICE FEE (0.299 SOL) ──
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+      const feeTx = new Transaction();
+      feeTx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 5000 }));
+      
+      // Referral Logic
+      let referrerWallet = null;
+      let referralPercent = 0.30;
+      if (referralCode) {
+        const { data: referrals } = await supabase.from('Referral').select('*').eq('referral_code', referralCode);
+        if (referrals && referrals.length > 0) {
+          const ref = referrals[0];
+          referrerWallet = new PublicKey(ref.referrer_wallet);
+          referralPercent = TIERS[ref.tier || 'bronze']?.commission || 0.30;
+          const referrerAmount = Math.floor(SCAN_FEE * referralPercent);
+          feeTx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: referrerWallet, lamports: referrerAmount }));
+          feeTx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: SCAN_FEE - referrerAmount }));
+        } else {
+          feeTx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: SCAN_FEE }));
+        }
+      } else {
+        feeTx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: SCAN_FEE }));
+      }
+
+      feeTx.add({
+        keys: [{ pubkey: publicKey, isSigner: true, isWritable: false }],
+        programId: new PublicKey('MemoSq4gqABAXDe96zce8cZtxqAKet8uxS2ndJqB91W'),
+        data: Buffer.from(`CFS_FEE`),
+      });
+
+      feeTx.recentBlockhash = blockhash;
+      feeTx.feePayer = publicKey;
+
+      toast.info('Please approve the 0.299 SOL service fee to begin extraction');
+      const feeSig = await wallet.sendTransaction(feeTx, connection);
+      await connection.confirmTransaction({ signature: feeSig, blockhash, lastValidBlockHeight }, 'confirmed');
+      toast.success('Fee confirmed! Starting cleanup...');
+
+      // ── STEP 2: BUILD CLEANUP TRANSACTIONS ──
       const transactions = [];
       const batchMeta = [];
 
@@ -340,10 +339,10 @@ export default function AccountScanner({ initialReferral = '' }) {
                 {!scanning && (
                   <div className="flex flex-col items-center">
                     <div className="flex items-center gap-2">
-                      <Search className="w-4 h-4 group-hover:text-emerald-300 transition-colors" />
-                      <span className="text-base">Scan Wallet</span>
+                       <Zap className="w-4 h-4 group-hover:text-emerald-300 transition-colors" />
+                      <span className="text-base uppercase tracking-wider">Start Scan</span>
                     </div>
-                    <span className="text-[9px] text-slate-500 opacity-70 mt-0.5 animate-pulse italic">discover reclaimable SOL</span>
+                    <span className="text-[9px] text-slate-500 opacity-70 mt-0.5 animate-pulse italic">click to discover reclaimable SOL</span>
                   </div>
                 )}
               </Button>
