@@ -41,44 +41,57 @@ export default function AccountScanner({ initialReferral = '' }) {
   const [claimDone, setClaimDone] = useState(false);
   const [showClaimModal, setShowClaimModal] = useState(false);
 
+  const [balanceAccountsCount, setBalanceAccountsCount] = useState(0);
+
   const scanWallet = async () => {
     if (!connected || !publicKey) return;
     setScanning(true);
     setScanned(false);
+    setAccounts([]);
+    setBalanceAccountsCount(0);
+    
     try {
+      toast.info('Initiating on-chain scan...');
+      
       // 1. DISCOVERY (Read-only, Free)
-      // Scan for both TOKEN_PROGRAM_ID and TOKEN_2022_PROGRAM_ID for completeness
+      // Scan for both TOKEN_PROGRAM_ID and TOKEN_2022_PROGRAM_ID
       const [tokenAccounts, token2022Accounts] = await Promise.all([
         connection.getParsedTokenAccountsByOwner(publicKey, { programId: TOKEN_PROGRAM_ID }),
         connection.getParsedTokenAccountsByOwner(publicKey, { programId: new PublicKey('TokenzQdBNbLqP5VEhdkTh9NQG46T9pL4vS2V389txa') })
       ]);
 
       const allAccounts = [...tokenAccounts.value, ...token2022Accounts.value];
-      console.log(`[Discovery] Total token accounts found: ${allAccounts.length}`);
+      
+      const closable = [];
+      let withBalance = 0;
 
-      const emptyAccounts = allAccounts
-        .filter(account => {
-          const amount = account.account.data.parsed.info.tokenAmount.uiAmount || 0;
-          // Include accounts with < 0.01 dust as they are effectively empty
-          return amount < 0.01;
-        })
-        .map(account => ({
-          pubkey: account.pubkey,
-          mint: account.account.data.parsed.info.mint,
-          rentLamports: account.account.lamports,
-        }));
+      allAccounts.forEach(account => {
+        const amount = account.account.data.parsed.info.tokenAmount.uiAmount || 0;
+        // Strictly empty or near-zero dust accounts are closable
+        if (amount < 0.0001) {
+          closable.push({
+            pubkey: account.pubkey,
+            mint: account.account.data.parsed.info.mint,
+            rentLamports: account.account.lamports,
+          });
+        } else {
+          withBalance++;
+        }
+      });
 
-      console.log(`[Discovery] Closable accounts filtered: ${emptyAccounts.length}`);
+      console.log(`[Discovery] Total: ${allAccounts.length} | Closable: ${closable.length} | With Balance: ${withBalance}`);
 
-      setAccounts(emptyAccounts);
-      // Auto-select all
-      setSelectedAccounts(new Set(emptyAccounts.map(a => a.pubkey.toString())));
+      setAccounts(closable);
+      setBalanceAccountsCount(withBalance);
+      setSelectedAccounts(new Set(closable.map(a => a.pubkey.toString())));
       setScanned(true);
       
-      if (emptyAccounts.length > 0) {
-        toast.success(`Found ${emptyAccounts.length} closable accounts!`);
+      if (closable.length > 0) {
+        toast.success(`Scan complete! Found ${closable.length} closable accounts.`);
+      } else if (withBalance > 0) {
+        toast.info(`Scan complete. ${withBalance} accounts found, but none are empty.`);
       } else {
-        toast.info('No closable accounts found. Your wallet is optimized!');
+        toast.success('Scan complete. Your wallet is fully optimized!');
       }
 
     } catch (err) {
@@ -459,6 +472,20 @@ export default function AccountScanner({ initialReferral = '' }) {
                 </div>
               </div>
             )}
+
+            {/* Scan Results Summary (Potato Style) */}
+            <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4 flex flex-col items-center">
+                <p className="text-[10px] text-emerald-400/60 uppercase tracking-widest mb-1">closable_accounts</p>
+                <p className="text-2xl font-mono text-emerald-400 font-bold">{accounts.length}</p>
+                <p className="text-[10px] text-emerald-400/40 font-mono mt-1">~{(accounts.length * 0.002).toFixed(3)} SOL reclaimable</p>
+              </div>
+              <div className="bg-slate-500/5 border border-slate-500/20 rounded-xl p-4 flex flex-col items-center">
+                <p className="text-[10px] text-slate-500/60 uppercase tracking-widest mb-1">with_balance</p>
+                <p className="text-2xl font-mono text-slate-400 font-bold">{balanceAccountsCount}</p>
+                <p className="text-[10px] text-slate-500/40 font-mono mt-1">not reclaimable (non-zero)</p>
+              </div>
+            </div>
 
             {accounts.length === 0 ? (
               <div className="text-center py-12">
