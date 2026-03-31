@@ -3,7 +3,7 @@ import { useWallet } from './WalletProvider';
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
-import { Transaction, SystemProgram, PublicKey } from '@solana/web3.js';
+import { Transaction, SystemProgram, PublicKey, ComputeBudgetProgram } from '@solana/web3.js';
 import { createCloseAccountInstruction } from '@solana/spl-token';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -84,9 +84,23 @@ export default function ProSettings() {
     try {
       if (PRO_FEE_SOL > 0) {
         const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
-        const tx = new Transaction().add(
-          SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: PRO_FEE_LAMPORTS })
+        const tx = new Transaction();
+        
+        // Add Priority Fees for Mainnet
+        tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 150000 }));
+
+        // Pro Unlock Payment
+        tx.add(
+          SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: Math.floor(PRO_FEE_LAMPORTS) })
         );
+
+        // Security Memo for verification
+        tx.add({
+          keys: [{ pubkey: publicKey, isSigner: true, isWritable: false }],
+          programId: new PublicKey('MemoSq4gqABAXDe96zce8cZtxqAKet8uxS2ndJqB91W'),
+          data: Buffer.from(`CFS_PRO_UNLOCK:${publicKey.toString().slice(0, 8)}`),
+        });
+
         tx.recentBlockhash = blockhash;
         tx.feePayer = publicKey;
 
@@ -145,13 +159,18 @@ export default function ProSettings() {
     const numBatches = Math.ceil(emptyAccounts.length / MAX_PER_TX);
     let totalReclaimed = 0;
     try {
-      const { blockhash } = await connection.getLatestBlockhash();
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
       const transactions = [];
       const batchMeta = [];
       for (let i = 0; i < numBatches; i++) {
         const batch = emptyAccounts.slice(i * MAX_PER_TX, (i + 1) * MAX_PER_TX);
         const tx = new Transaction();
+        
+        // Add Priority Fees for Auto-Sweep batches
+        tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 150000 }));
+        
         batch.forEach(acc => tx.add(createCloseAccountInstruction(acc.pubkey, publicKey, publicKey, [], acc.programId)));
+        
         tx.recentBlockhash = blockhash;
         tx.feePayer = publicKey;
         transactions.push(tx);
@@ -160,7 +179,7 @@ export default function ProSettings() {
       const signedTxs = await wallet.signAllTransactions(transactions);
       for (let i = 0; i < signedTxs.length; i++) {
         const sig = await connection.sendRawTransaction(signedTxs[i].serialize());
-        await connection.confirmTransaction(sig, 'confirmed');
+        await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, 'confirmed');
         const batchSOL = batchMeta[i].reduce((s, a) => s + (a.account.lamports || 0), 0) / 1e9;
         totalReclaimed += batchSOL;
       }
@@ -235,6 +254,7 @@ export default function ProSettings() {
             </div>
           </div>
 
+          {/* @ts-ignore */}
           <Button
             onClick={unlockPro}
             disabled={unlocking || !connected}
@@ -313,6 +333,7 @@ export default function ProSettings() {
                 <span className="text-[10px] text-emerald-500/70 font-mono">monitoring</span>
               </div>
             )}
+            {/* @ts-ignore */}
             <Switch
               checked={autoSweepEnabled}
               onCheckedChange={(val) => {
@@ -333,12 +354,16 @@ export default function ProSettings() {
 
           <div className="space-y-2">
             <label className="text-[10px] text-slate-600 uppercase tracking-widest">sweep_threshold</label>
+            {/* @ts-ignore */}
             <Select value={threshold} onValueChange={setThreshold} disabled={!autoSweepEnabled}>
+              {/* @ts-ignore */}
               <SelectTrigger className="bg-black/60 border-emerald-500/20 text-emerald-400 text-xs font-mono">
                 <SelectValue />
               </SelectTrigger>
+              {/* @ts-ignore */}
               <SelectContent className="bg-black border-emerald-500/20">
                 {SWEEP_THRESHOLDS.map(t => (
+                  /* @ts-ignore */
                   <SelectItem key={t.value} value={t.value} className="text-xs font-mono">
                     {t.label}
                   </SelectItem>
