@@ -92,10 +92,13 @@ export default function AccountScanner({ initialReferral = '' }) {
         programId: TOKEN_PROGRAM_ID,
       });
 
+      console.log(`[Discovery] Total token accounts: ${tokenAccounts.value.length}`);
+
       const emptyAccounts = tokenAccounts.value
         .filter(account => {
-          const amount = account.account.data.parsed.info.tokenAmount.uiAmount;
-          return amount === 0 || amount === null;
+          const amount = account.account.data.parsed.info.tokenAmount.uiAmount || 0;
+          // Relax filter: Include accounts with < 0.01 dust as they are effectively empty
+          return amount < 0.01;
         })
         .map(account => ({
           pubkey: account.pubkey,
@@ -103,11 +106,18 @@ export default function AccountScanner({ initialReferral = '' }) {
           rentLamports: account.account.lamports,
         }));
 
+      console.log(`[Discovery] Closable accounts found: ${emptyAccounts.length}`);
+
       setAccounts(emptyAccounts);
       // Auto-select all
       setSelectedAccounts(new Set(emptyAccounts.map(a => a.pubkey.toString())));
       setScanned(true);
-      toast.success(`Found ${emptyAccounts.length} closable accounts!`);
+      
+      if (emptyAccounts.length > 0) {
+        toast.success(`Found ${emptyAccounts.length} closable accounts!`);
+      } else {
+        toast.info('No closable accounts found. Your wallet is optimized!');
+      }
 
     } catch (err) {
       console.error('Scan error:', err);
