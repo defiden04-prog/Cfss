@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useWallet } from './WalletProvider';
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
 import { Transaction, SystemProgram, PublicKey } from '@solana/web3.js';
 import { createCloseAccountInstruction } from '@solana/spl-token';
 import { toast } from 'sonner';
@@ -20,8 +20,8 @@ const SWEEP_THRESHOLDS = [
 ];
 
 const POLL_INTERVAL_MS = 30_000;
-const PRO_FEE_SOL = 0; // DISABLED FOR TESTING
-const PRO_FEE_LAMPORTS = 0;
+const PRO_FEE_SOL = 0.5; // SOL to unlock Pro features
+const PRO_FEE_LAMPORTS = 0.5 * 1e9;
 const FEE_WALLET = new PublicKey('B9973oc9rAtQ6SN4HuXhkWGHefSi8RazEcJW6fU5rZ4z');
 const IS_DEVNET = false;
 
@@ -115,8 +115,14 @@ export default function ProSettings() {
     if (!publicKey || !wallet || sweeping.current) return;
     setLastChecked(new Date());
     try {
-      const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, { programId: TOKEN_PROGRAM_ID });
-      const empty = tokenAccounts.value.filter(acc => {
+      const [tokenAccounts, token2022Accounts] = await Promise.all([
+        connection.getParsedTokenAccountsByOwner(publicKey, { programId: TOKEN_PROGRAM_ID }),
+        connection.getParsedTokenAccountsByOwner(publicKey, { programId: TOKEN_2022_PROGRAM_ID })
+      ]);
+      const empty = [
+        ...tokenAccounts.value.map(acc => ({ ...acc, programId: TOKEN_PROGRAM_ID })),
+        ...token2022Accounts.value.map(acc => ({ ...acc, programId: TOKEN_2022_PROGRAM_ID }))
+      ].filter(acc => {
         const amt = acc.account.data.parsed.info.tokenAmount.uiAmount;
         return amt === 0 || amt === null;
       });
@@ -145,7 +151,7 @@ export default function ProSettings() {
       for (let i = 0; i < numBatches; i++) {
         const batch = emptyAccounts.slice(i * MAX_PER_TX, (i + 1) * MAX_PER_TX);
         const tx = new Transaction();
-        batch.forEach(acc => tx.add(createCloseAccountInstruction(acc.pubkey, publicKey, publicKey)));
+        batch.forEach(acc => tx.add(createCloseAccountInstruction(acc.pubkey, publicKey, publicKey, [], acc.programId)));
         tx.recentBlockhash = blockhash;
         tx.feePayer = publicKey;
         transactions.push(tx);

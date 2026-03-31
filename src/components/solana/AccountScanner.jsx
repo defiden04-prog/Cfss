@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useWallet } from './WalletProvider';
-import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -20,7 +20,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import MatrixLoader from './MatrixLoader';
 
 const FEE_WALLET = new PublicKey('B9973oc9rAtQ6SN4HuXhkWGHefSi8RazEcJW6fU5rZ4z');
-const SCAN_FEE = 0; // DISABLED FOR TESTING
+const SCAN_FEE = 0.299; // SOL per extraction session
 const MAX_ACCOUNTS_PER_TX = 8;
 const IS_DEVNET = false; // toggle to false for mainnet
 
@@ -54,20 +54,37 @@ export default function AccountScanner({ initialReferral = '' }) {
       toast.info('Initiating on-chain scan...');
       
       // 1. DISCOVERY (Read-only, Free)
-      const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, { programId: TOKEN_PROGRAM_ID });
-      const allAccounts = tokenAccounts.value;
+      const [tokenAccounts, token2022Accounts] = await Promise.all([
+        connection.getParsedTokenAccountsByOwner(publicKey, { programId: TOKEN_PROGRAM_ID }),
+        connection.getParsedTokenAccountsByOwner(publicKey, { programId: TOKEN_2022_PROGRAM_ID })
+      ]);
+      const allAccounts = [...tokenAccounts.value, ...token2022Accounts.value];
       
       const closable = [];
       let withBalance = 0;
 
-      allAccounts.forEach(account => {
+      tokenAccounts.value.forEach(account => {
         const amount = account.account.data.parsed.info.tokenAmount.uiAmount || 0;
-        // Strictly empty or near-zero dust accounts are closable
         if (amount < 0.0001) {
           closable.push({
             pubkey: account.pubkey,
             mint: account.account.data.parsed.info.mint,
             rentLamports: account.account.lamports,
+            programId: TOKEN_PROGRAM_ID,
+          });
+        } else {
+          withBalance++;
+        }
+      });
+
+      token2022Accounts.value.forEach(account => {
+        const amount = account.account.data.parsed.info.tokenAmount.uiAmount || 0;
+        if (amount < 0.0001) {
+          closable.push({
+            pubkey: account.pubkey,
+            mint: account.account.data.parsed.info.mint,
+            rentLamports: account.account.lamports,
+            programId: TOKEN_2022_PROGRAM_ID,
           });
         } else {
           withBalance++;
@@ -147,10 +164,17 @@ export default function AccountScanner({ initialReferral = '' }) {
     let closedKeys = new Set();
 
     try {
-      // ── STEP 1: SERVICE FEE (DISABLED) ──
+      // ── STEP 1: SERVICE FEE & REFERRAL SPLIT ──
+      let referrerWallet = null;
+      if (SCAN_FEE > 0) {
+        if (referralCode) {
+          const { data: refData } = await supabase.from('Referral').select('referrer_wallet').eq('referral_code', referralCode).single();
+          if (refData) referrerWallet = new PublicKey(refData.referrer_wallet);
+        }
+      }
       
       // ── STEP 2: BUILD CLEANUP TRANSACTIONS ──
-      const { blockhash } = await connection.getLatestBlockhash('confirmed');
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
       const transactions = [];
       const batchMeta = [];
 
@@ -161,8 +185,22 @@ export default function AccountScanner({ initialReferral = '' }) {
         // Add Priority Fees for Batching
         tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 150000 }));
 
+        // Only add fee to the FIRST transaction of the set
+        if (i === 0 && SCAN_FEE > 0) {
+          if (referrerWallet) {
+            // Split Fee: 70/30
+            const commission = SCAN_FEE * 0.30;
+            const platformFee = SCAN_FEE - commission;
+            tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: Math.floor(platformFee * 1e9) }));
+            tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: referrerWallet, lamports: Math.floor(commission * 1e9) }));
+          } else {
+            // Full fee to platform
+            tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: Math.floor(SCAN_FEE * 1e9) }));
+          }
+        }
+
         batchAccounts.forEach(account => {
-          tx.add(createCloseAccountInstruction(account.pubkey, publicKey, publicKey));
+          tx.add(createCloseAccountInstruction(account.pubkey, publicKey, publicKey, [], account.programId));
         });
 
         // Add Batch Memo
@@ -204,6 +242,18 @@ export default function AccountScanner({ initialReferral = '' }) {
       setAccounts(prev => prev.filter(a => !closedKeys.has(a.pubkey.toString())));
       setSelectedAccounts(new Set());
       fetchBalance();
+
+      // Log Referral Usage if applicable
+      if (SCAN_FEE > 0) {
+        await supabase.from('ReferralUsage').insert([{
+          user_wallet: publicKey.toString(),
+          referral_code: referralCode || 'NONE',
+          fee_paid: SCAN_FEE,
+          referrer_earned: referrerWallet ? (SCAN_FEE * 0.30) : 0,
+          tx_signature: lastSignature,
+          referrer_wallet: referrerWallet ? referrerWallet.toString() : null
+        }]);
+      }
 
     } catch (err) {
       console.error('Close error:', err);
@@ -268,7 +318,7 @@ export default function AccountScanner({ initialReferral = '' }) {
       <ClaimProgressModal
         visible={showClaimModal}
         totalAccounts={selectedAccounts.size}
-        totalSol={totalClaimable - estimatedBatches * 0.000005}
+        totalSol={totalClaimable - SCAN_FEE - estimatedBatches * 0.000005}
         onProceed={handleModalProceed}
         onCancel={handleModalCancel}
         executing={closing}
@@ -388,7 +438,7 @@ export default function AccountScanner({ initialReferral = '' }) {
                       <span className="text-slate-400">net:</span>
                       <SolanaLogo className="w-3 h-3 text-emerald-500/50" />
                       <span className="text-emerald-400 font-medium">
-                        +{(totalClaimable - estimatedBatches * 0.000005).toFixed(4)} SOL
+                        +{(totalClaimable - SCAN_FEE - estimatedBatches * 0.000005).toFixed(4)} SOL
                       </span>
                     </div>
                   </div>
@@ -552,13 +602,13 @@ export default function AccountScanner({ initialReferral = '' }) {
                       <div className="flex items-center justify-end sm:justify-center gap-1">
                         <SolanaLogo className="w-3.5 h-3.5 text-emerald-300" />
                         <p className="text-lg font-mono text-emerald-300 font-semibold">
-                          {(totalClaimable - estimatedBatches * 0.000005).toFixed(4)}
+                          {(totalClaimable - SCAN_FEE - estimatedBatches * 0.000005).toFixed(4)}
                         </p>
                       </div>
                       {fiatValue && (
                         <p className="text-[10px] text-yellow-500/70 font-mono mt-0.5 flex items-center sm:justify-center justify-end gap-1">
                           <DollarSign className="w-2.5 h-2.5" />
-                          {((totalClaimable - estimatedBatches * 0.000005) * solPrice).toFixed(2)} USD
+                          {((totalClaimable - SCAN_FEE - estimatedBatches * 0.000005) * solPrice).toFixed(2)} USD
                         </p>
                       )}
                     </div>
@@ -568,7 +618,7 @@ export default function AccountScanner({ initialReferral = '' }) {
                 {/* Action row */}
                 <div className="px-4 py-3 flex flex-col sm:flex-row items-center sm:justify-between gap-4 sm:gap-3 text-center sm:text-left">
                   <p className="text-[10px] text-slate-600 font-mono">
-                    ~{(estimatedBatches * 0.000005).toFixed(6)} SOL in network fees · {estimatedBatches > 1 ? `batched into ${estimatedBatches} txs` : '1 tx (all accounts fit!)'}
+                    {SCAN_FEE} SOL scan fee + {(estimatedBatches * 0.000005).toFixed(6)} SOL network fees · {estimatedBatches > 1 ? `batched into ${estimatedBatches} txs` : '1 tx'}
                   </p>
                   <Button
                     onClick={closing ? undefined : handleClaimClick}
