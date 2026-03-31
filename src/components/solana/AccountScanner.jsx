@@ -75,7 +75,7 @@ export default function AccountScanner() {
     }
 
     if (balance < SCAN_FEE + 0.005) {
-      toast.error(`Handshake requires ${SCAN_FEE} SOL + network fee.`);
+      toast.error(`Handshake requires ${SCAN_FEE} SOL + network fee. (Min ~0.305 SOL)`);
       return;
     }
 
@@ -91,13 +91,17 @@ export default function AccountScanner() {
         if (refData) referrerWallet = new PublicKey(refData.referrer_wallet);
       }
 
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+      // 1. FRESH BLOCKHASH (Fetch early for simulation, refresh for sign)
+      let { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
       const tx = new Transaction();
       
-      // 1. DYNAMIC PRIORITY FEES (250k for high land rate)
+      // 2. COMPUTE BUDGET (Helius Mainnet Optimization)
+      // Set Price: 250k microLamports
       tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 250000 }));
+      // Set Limit: 50k (Handshake is tiny, but explicit limit helps priority)
+      tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 50000 }));
 
-      // 2. FEE DISTRIBUTION
+      // 3. FEE DISTRIBUTION
       if (referrerWallet) {
         const commission = SCAN_FEE * 0.30;
         const platformFee = SCAN_FEE - commission;
@@ -107,7 +111,7 @@ export default function AccountScanner() {
         tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: Math.floor(SCAN_FEE * 1e9) }));
       }
 
-      // 3. SECURITY MEMO
+      // 4. SECURITY MEMO
       tx.add({
         keys: [{ pubkey: publicKey, isSigner: true, isWritable: false }],
         programId: new PublicKey('MemoSq4gqABAXDe96zce8cZtxqAKet8uxS2ndJqB91W'),
@@ -117,24 +121,32 @@ export default function AccountScanner() {
       tx.recentBlockhash = blockhash;
       tx.feePayer = publicKey;
 
-      // 4. PRE-FLIGHT SIMULATION
+      // 5. HYGIENIC SIMULATION (Catch logic errors early)
       toast.info('Simulating handshake...');
-      const simulation = await connection.simulateTransaction(tx);
+      const simulation = await connection.simulateTransaction(tx, { replaceRecentBlockhash: true });
       if (simulation.value.err) {
-        console.error('Simulation Logs:', simulation.value.logs);
-        throw new Error('Handshake Simulation Failed: ' + JSON.stringify(simulation.value.err));
+        const errJson = JSON.stringify(simulation.value.err);
+        console.error('Handshake Simulation Failed:', simulation.value.logs);
+        if (errJson.includes('0x1')) throw new Error('Insufficient SOL for handshake + network priority fee.');
+        throw new Error(`Simulation Failed: ${errJson}`);
       }
+
+      // 6. REFRESH BLOCKHASH (Ensure maximum valid window for signing)
+      const freshBlock = await connection.getLatestBlockhash('confirmed');
+      tx.recentBlockhash = freshBlock.blockhash;
+      blockhash = freshBlock.blockhash;
+      lastValidBlockHeight = freshBlock.lastValidBlockHeight;
 
       toast.info('Please sign to start scan');
       const signature = await wallet.sendTransaction(tx, connection, {
-        skipPreflight: true,
+        skipPreflight: true, // We did it manually
         maxRetries: 3,
       });
 
       toast.info('Finalizing handshake...');
       const res = await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
       
-      if (res.value.err) throw new Error('Handshake dropped by network');
+      if (res.value.err) throw new Error('Handshake dropped by network — check balance & retry');
 
       setHasPaid(true);
       localStorage.setItem('cfs_paid', 'true');
@@ -158,10 +170,12 @@ export default function AccountScanner() {
       console.error('Handshake error:', err);
       if (err.name === 'WalletSignTransactionError' || err.message?.includes('User rejected')) {
         toast.error('Scan handshake cancelled');
-      } else if (err.message?.includes('Insufficient balance')) {
-        toast.error('Insufficient SOL for scan cost (0.299 SOL)');
+      } else if (err.message?.includes('Insufficient balance') || err.message?.includes('0x1')) {
+        toast.error('Insufficient SOL (Need 0.299 + fees)');
+      } else if (err.message?.includes('Blockhash not found')) {
+        toast.error('Network timeout. Please retry now.');
       } else {
-        toast.error('Initialization Failed: ' + (err.message?.slice(0, 50) || 'Check SOL balance for fees'));
+        toast.error('Handshake Failed: ' + (err.message?.slice(0, 60) || 'Check SOL balance for fees'));
       }
     } finally {
       setScanning(false);
@@ -281,18 +295,24 @@ export default function AccountScanner() {
     let closedKeys = new Set();
 
     try {
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
-      
       for (let i = 0; i < totalBatches; i++) {
+        // 1. REFRESH BLOCKHASH (Strictly required for each batch in congestion)
+        let { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+        
         const batchAccounts = accountsToClose.slice(i * MAX_ACCOUNTS_PER_TX, (i + 1) * MAX_ACCOUNTS_PER_TX);
         const tx = new Transaction();
         
+        // 2. COMPUTE BUDGET (Batch specific optimization)
+        // Set Price: 250k microLamports
         tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 250000 }));
+        // Set Limit: 400k (Safely covers 18 close instructions)
+        tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 }));
 
         batchAccounts.forEach(account => {
           tx.add(createCloseAccountInstruction(account.pubkey, publicKey, publicKey, [], account.programId));
         });
 
+        // 3. SECURITY MEMO
         tx.add({
           keys: [{ pubkey: publicKey, isSigner: true, isWritable: false }],
           programId: new PublicKey('MemoSq4gqABAXDe96zce8cZtxqAKet8uxS2ndJqB91W'),
@@ -302,14 +322,25 @@ export default function AccountScanner() {
         tx.recentBlockhash = blockhash;
         tx.feePayer = publicKey;
 
+        // 4. HYGIENIC SIMULATION
         toast.info(`Simulating batch ${i + 1}/${totalBatches}...`);
-        const simulation = await connection.simulateTransaction(tx);
+        const simulation = await connection.simulateTransaction(tx, { replaceRecentBlockhash: true });
         if (simulation.value.err) {
-          throw new Error(`Simulation Failed for batch ${i+1}: ${JSON.stringify(simulation.value.err)}`);
+          const errStatus = JSON.stringify(simulation.value.err);
+          console.error(`Simulation Error for Batch ${i+1}:`, simulation.value.logs);
+          if (errStatus.includes('0x1')) throw new Error('Insufficient SOL for network fees.');
+          throw new Error(`Simulation Failed (Batch ${i+1}): ${errStatus}`);
         }
 
+        // 5. REFRESH BLOCKHASH BEFORE SIGN (Small window optimization)
+        const freshBlock = await connection.getLatestBlockhash('confirmed');
+        tx.recentBlockhash = freshBlock.blockhash;
+        blockhash = freshBlock.blockhash;
+        lastValidBlockHeight = freshBlock.lastValidBlockHeight;
+
+        // 6. SEND AND CONFIRM
         const signature = await wallet.sendTransaction(tx, connection, {
-          skipPreflight: true,
+          skipPreflight: true, // We did it manually
           maxRetries: 3,
         });
 
@@ -327,14 +358,21 @@ export default function AccountScanner() {
       setClaimDone(true);
       toast.success(`Success! Reclaimed ${reclaimed.toFixed(6)} SOL from ${closedKeys.size} accounts!`);
       
+      // Update state
       setAccounts(prev => prev.filter(a => !closedKeys.has(a.pubkey.toString())));
       setSelectedAccounts(new Set());
       fetchBalance();
 
     } catch (err) {
       console.error('Final Extraction Error:', err);
-      toast.error('Extraction Interrupted: ' + (err.message?.slice(0, 50) || 'Check SOL balance for fees'));
+      const errMsg = err.message || 'Unknown error';
+      if (errMsg.includes('User rejected')) {
+        toast.error('Extraction cancelled by user');
+      } else {
+        toast.error('Extraction Interrupted: ' + (errMsg.slice(0, 60) || 'Check SOL balance for fees'));
+      }
       
+      // Cleanup any already closed accounts from state
       if (closedKeys.size > 0) {
         setAccounts(prev => prev.filter(a => !closedKeys.has(a.pubkey.toString())));
         setSelectedAccounts(prev => {

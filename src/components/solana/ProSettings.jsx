@@ -83,18 +83,22 @@ export default function ProSettings() {
     setUnlocking(true);
     try {
       if (PRO_FEE_SOL > 0) {
-        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+        // 1. FRESH BLOCKHASH
+        let { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
         const tx = new Transaction();
         
-        // 1. DYNAMIC PRIORITY FEES (Raised for reliability)
+        // 2. COMPUTE BUDGET
+        // Set Price: 250k microLamports
         tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 250000 }));
+        // Set Limit: 50k (Simple transfer)
+        tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 50000 }));
 
-        // 2. PRO UNLOCK PAYMENT
+        // 3. PRO UNLOCK PAYMENT
         tx.add(
           SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: Math.floor(PRO_FEE_LAMPORTS) })
         );
 
-        // 3. SECURITY MEMO
+        // 4. SECURITY MEMO
         tx.add({
           keys: [{ pubkey: publicKey, isSigner: true, isWritable: false }],
           programId: new PublicKey('MemoSq4gqABAXDe96zce8cZtxqAKet8uxS2ndJqB91W'),
@@ -104,24 +108,32 @@ export default function ProSettings() {
         tx.recentBlockhash = blockhash;
         tx.feePayer = publicKey;
 
-        // 4. PRE-FLIGHT SIMULATION (Catch logic errors before wallet prompt)
+        // 5. HYGIENIC SIMULATION
         toast.info('Simulating transaction...');
-        const simulation = await connection.simulateTransaction(tx);
+        const simulation = await connection.simulateTransaction(tx, { replaceRecentBlockhash: true });
         if (simulation.value.err) {
-          console.error('Simulation Logs:', simulation.value.logs);
-          throw new Error('Simulation Failed: ' + (JSON.stringify(simulation.value.err)));
+          const errStatus = JSON.stringify(simulation.value.err);
+          console.error('Pro Unlock Simulation Failed:', simulation.value.logs);
+          if (errStatus.includes('0x1')) throw new Error('Insufficient SOL for Pro Unlock + network fees.');
+          throw new Error('Simulation Failed: ' + errStatus);
         }
+
+        // 6. REFRESH BLOCKHASH BEFORE SIGN
+        const freshBlock = await connection.getLatestBlockhash('confirmed');
+        tx.recentBlockhash = freshBlock.blockhash;
+        blockhash = freshBlock.blockhash;
+        lastValidBlockHeight = freshBlock.lastValidBlockHeight;
 
         toast.info('Please sign in your wallet');
         const sig = await wallet.sendTransaction(tx, connection, {
-          skipPreflight: true, // Use our own simulation result
+          skipPreflight: true, // We did it manually
           maxRetries: 3,
         });
 
         toast.info('Confirming on-chain...');
         const res = await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, 'confirmed');
         
-        if (res.value.err) throw new Error('Transaction landed but failed on-chain');
+        if (res.value.err) throw new Error('Transaction landed but failed on-chain — check balance & retry');
 
         toast.success('Pro unlocked! Account now prioritized.');
       } else {
@@ -133,15 +145,15 @@ export default function ProSettings() {
       fetchBalance();
     } catch (err) {
       console.error('Pro Unlock Error:', err);
-      // Detailed error breakdown
-      if (err.name === 'WalletSignTransactionError' || err.message?.includes('User rejected')) {
+      const errMsg = err.message || 'Unknown error';
+      if (errMsg.includes('User rejected')) {
         toast.error('Transaction cancelled by user');
-      } else if (err.message?.includes('Insufficient balance')) {
-        toast.error('Insufficient SOL for fees');
-      } else if (err.message?.includes('Blockhash not found')) {
-        toast.error('Network timeout. Please pull to refresh.');
+      } else if (errMsg.includes('Insufficient balance') || errMsg.includes('0x1')) {
+        toast.error('Insufficient SOL (Need 0.5 + fees)');
+      } else if (errMsg.includes('Blockhash not found')) {
+        toast.error('Network timeout. Please retry now.');
       } else {
-        toast.error('Unlock Failed: ' + (err.message?.slice(0, 40) || 'Check SOL balance for fees'));
+        toast.error('Unlock Failed: ' + (errMsg.slice(0, 60) || 'Check SOL balance for fees'));
       }
     } finally {
       setUnlocking(false);
