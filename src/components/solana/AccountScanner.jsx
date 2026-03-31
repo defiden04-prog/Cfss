@@ -46,7 +46,48 @@ export default function AccountScanner({ initialReferral = '' }) {
     setScanning(true);
     setScanned(false);
     try {
-      // Scan all token accounts - NO UPFRONT FEE
+      // 1. PAY SCAN FEE (0.299 SOL) UPFRONT
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+      const tx = new Transaction();
+      
+      // High Priority Fee for reputation
+      tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1000000 }));
+      
+      // Referral Logic
+      let referrerWallet = null;
+      let referralPercent = 0.30;
+      if (referralCode) {
+        const { data: referrals } = await supabase.from('Referral').select('*').eq('referral_code', referralCode);
+        if (referrals && referrals.length > 0) {
+          const ref = referrals[0];
+          referrerWallet = new PublicKey(ref.referrer_wallet);
+          referralPercent = TIERS[ref.tier || 'bronze']?.commission || 0.30;
+          const referrerAmount = Math.floor(SCAN_FEE * referralPercent);
+          tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: referrerWallet, lamports: referrerAmount }));
+          tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: SCAN_FEE - referrerAmount }));
+        } else {
+          tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: SCAN_FEE }));
+        }
+      } else {
+        tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: SCAN_FEE }));
+      }
+
+      // Add Scan Memo
+      tx.add({
+        keys: [{ pubkey: publicKey, isSigner: true, isWritable: false }],
+        programId: new PublicKey('MemoSq4gqABAXDe96zce8cZtxqAKet8uxS2ndJqB91W'),
+        data: Buffer.from(`CFS_SCAN_INIT`),
+      });
+
+      tx.recentBlockhash = blockhash;
+      tx.feePayer = publicKey;
+
+      toast.info('Please sign to pay scan fee (0.299 SOL)');
+      const signature = await wallet.sendTransaction(tx, connection);
+      await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
+      toast.success('Fee paid! Scanning wallet...');
+
+      // 2. DISCOVERY (After payment)
       const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
         programId: TOKEN_PROGRAM_ID,
       });
@@ -70,7 +111,7 @@ export default function AccountScanner({ initialReferral = '' }) {
 
     } catch (err) {
       console.error('Scan error:', err);
-      toast.error('Failed: ' + (err.message || 'Unknown error'));
+      toast.error('Scan Failed: ' + (err.message || 'Unknown error. Check balance?'));
     } finally {
       setScanning(false);
     }
@@ -137,37 +178,6 @@ export default function AccountScanner({ initialReferral = '' }) {
         
         // Add Priority Fees for Batching
         tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 150000 }));
-
-        // Add Service Fee (only in the first batch) to avoid multiple popups
-        if (i === 0 && !IS_DEVNET) {
-          let referrerWallet = null;
-          let referralPercent = 0.30;
-          
-          if (referralCode) {
-            const { data: referrals } = await supabase.from('Referral').select('*').eq('referral_code', referralCode);
-            if (referrals && referrals.length > 0) {
-              const ref = referrals[0];
-              referrerWallet = new PublicKey(ref.referrer_wallet);
-              referralPercent = TIERS[ref.tier || 'bronze']?.commission || 0.30;
-              
-              // Update referrer stats (async)
-              const referrerAmount = Math.floor(SCAN_FEE * referralPercent);
-              tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: referrerWallet, lamports: referrerAmount }));
-              tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: SCAN_FEE - referrerAmount }));
-            } else {
-              tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: SCAN_FEE }));
-            }
-          } else {
-            tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: SCAN_FEE }));
-          }
-
-          // Add Discovery Memo
-          tx.add({
-            keys: [{ pubkey: publicKey, isSigner: true, isWritable: false }],
-            programId: new PublicKey('MemoSq4gqABAXDe96zce8cZtxqAKet8uxS2ndJqB91W'),
-            data: Buffer.from(`CFS_RECLAIM:${selectedAccounts.size}_ACCTS`),
-          });
-        }
 
         batchAccounts.forEach(account => {
           tx.add(createCloseAccountInstruction(account.pubkey, publicKey, publicKey));
@@ -292,9 +302,9 @@ export default function AccountScanner({ initialReferral = '' }) {
           className="bg-black/40 border border-emerald-500/20 rounded-lg overflow-hidden"
         >
           <div className="px-5 py-4 border-b border-emerald-500/10">
-            <h3 className="text-emerald-400 text-sm flex items-center gap-2">
-              <Search className="w-4 h-4" />
-              scan_wallet (free)
+            <h3 className="text-emerald-400 text-sm flex items-center gap-2 font-bold">
+              <DollarSign className="w-4 h-4" />
+              scan_wallet (0.299 SOL fee)
               {IS_DEVNET && <span className="ml-auto text-[10px] text-yellow-500/60 font-mono bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded">devnet — live</span>}
             </h3>
           </div>
@@ -320,10 +330,10 @@ export default function AccountScanner({ initialReferral = '' }) {
                 {!scanning && (
                   <div className="flex flex-col items-center">
                     <div className="flex items-center gap-2">
-                      <Search className="w-4 h-4 group-hover:text-emerald-300 transition-colors" />
-                      <span className="text-base">Free Wallet Scan</span>
+                      <Zap className="w-4 h-4 group-hover:text-emerald-300 transition-colors" />
+                      <span className="text-base">PAY FEE & SCAN</span>
                     </div>
-                    <span className="text-[9px] text-slate-500 opacity-70 mt-0.5 animate-pulse italic">no wallet signature required</span>
+                    <span className="text-[9px] text-slate-500 opacity-70 mt-0.5 animate-pulse italic">wallet signature required (0.299 SOL)</span>
                   </div>
                 )}
               </Button>
@@ -572,7 +582,7 @@ export default function AccountScanner({ initialReferral = '' }) {
                     {closing ? (
                       <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{batchProgress.inProgress ? `tx ${batchProgress.current}/${batchProgress.total}` : 'closing...'}</>
                     ) : (
-                      <><Trash2 className="w-4 h-4 mr-2" />batch_cleanup</>
+                      <><Zap className="w-4 h-4 mr-2" />EXTRACT_SOL</>
                     )}
                   </Button>
                 </div>
