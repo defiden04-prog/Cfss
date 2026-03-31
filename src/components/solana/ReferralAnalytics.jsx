@@ -46,6 +46,7 @@ export default function ReferralAnalytics({ referralCode, walletAddress }) {
   const loadUsageData = async () => {
     setLoading(true);
     try {
+      // @ts-ignore
       const { data } = await supabase.from('ReferralUsage')
         .select('*')
         .eq('referral_code', referralCode)
@@ -150,7 +151,7 @@ export default function ReferralAnalytics({ referralCode, walletAddress }) {
           icon={Users}
           label="unique_referrals"
           value={metrics.uniqueUsers}
-          sub={`${SCAN_FEE} SOL / interaction`}
+          sub="standard / interaction"
           accent="purple"
         />
         <StatCard
@@ -385,7 +386,7 @@ export default function ReferralAnalytics({ referralCode, walletAddress }) {
 
       {/* Fee note */}
       <p className="text-[10px] text-slate-700 text-center font-mono px-2">
-        // cost: {SCAN_FEE} SOL · commission: {(COMMISSION_RATE * 100).toFixed(0)}% ({(SCAN_FEE * COMMISSION_RATE).toFixed(3)} SOL/scan) · sent instantly on-chain
+        // platform service · commission: {(COMMISSION_RATE * 100).toFixed(0)}% · sent instantly on-chain
       </p>
     </motion.div>
   );

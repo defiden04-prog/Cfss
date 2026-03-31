@@ -64,8 +64,15 @@ function AppWalletBridge({ children }) {
 
 export function WalletProvider({ children }) {
   // PhantomWalletAdapter is required for mobile deep-linking to work on standard browsers (Safari/Chrome)
+  // Metadata for Phantom verification (Site Name, Icon, Logo)
   const wallets = useMemo(() => [
-    new PhantomWalletAdapter(),
+    new PhantomWalletAdapter({
+      appConfig: {
+        name: 'Claim Free Solana',
+        icon: 'https://claimfreesolana.fun/logo.png', // Ensure this points to an actual logo
+        url: 'https://claimfreesolana.fun'
+      }
+    }),
     new SolflareWalletAdapter(),
     new TorusWalletAdapter(),
     new LedgerWalletAdapter(),

