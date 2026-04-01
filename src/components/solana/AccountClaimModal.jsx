@@ -11,12 +11,13 @@ const STEPS = [
   { id: 'broadcast', icon: Zap,      label: 'Broadcasting to Network', sublabel: 'Sending to Solana validators...' },
 ];
 
-export default function ClaimProgressModal({ 
-  visible, 
+export default function AccountClaimModal({ 
+  isOpen, 
   totalAccounts, 
   totalSol, 
   onProceed, 
   onCancel,
+  onClose,
   executing = false,
   completed = false,
   signature = null
@@ -25,7 +26,7 @@ export default function ClaimProgressModal({
   const [simulationDone, setSimulationDone] = useState(false);
 
   useEffect(() => {
-    if (!visible) {
+    if (!isOpen) {
       setCurrentStep(-1);
       setSimulationDone(false);
       return;
@@ -46,13 +47,13 @@ export default function ClaimProgressModal({
     };
     const t = setTimeout(advance, 800 + Math.random() * 400);
     return () => clearTimeout(t);
-  }, [visible, executing, completed]);
+  }, [isOpen, executing, completed]);
 
   const progress = completed ? 100 : executing ? 90 : simulationDone ? 100 : currentStep >= 0 ? Math.round(((currentStep) / STEPS.length) * 100) : 0;
 
   return (
     <AnimatePresence>
-      {visible && (
+      {isOpen && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -63,7 +64,7 @@ export default function ClaimProgressModal({
             initial={{ scale: 0.95, opacity: 0, y: 30 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.95, opacity: 0, y: 30 }}
-            className="w-full max-w-md bg-zinc-950 border border-emerald-500/30 rounded-2xl overflow-hidden shadow-[0_0_50px_-12px_rgba(16,185,129,0.25)]"
+            className="w-full max-w-md bg-zinc-950 border border-emerald-500/30 rounded-2xl overflow-hidden shadow-[0_0_50px_-12px_rgba(16,185,129,0.25)] mx-auto"
             style={{ fontFamily: "'JetBrains Mono', 'Fira Code', monospace" }}
           >
             {/* Header */}
