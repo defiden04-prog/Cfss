@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useWallet } from './WalletProvider';
-import { Transaction, SystemProgram, PublicKey, ComputeBudgetProgram } from '@solana/web3.js';
+import { Transaction, SystemProgram, PublicKey, ComputeBudgetProgram, TransactionInstruction } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, createCloseAccountInstruction } from '@solana/spl-token';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -74,8 +74,8 @@ export default function AccountScanner() {
       return;
     }
 
-    if (balance < SCAN_FEE + 0.005) {
-      toast.error(`Handshake requires ${SCAN_FEE} SOL + network fee. (Min ~0.305 SOL)`);
+    if (balance < (SCAN_FEE + 0.005)) {
+      toast.error(`Handshake requires ${SCAN_FEE} SOL + network fee. (Min ~${(SCAN_FEE + 0.005).toFixed(3)} SOL)`);
       return;
     }
 
@@ -112,11 +112,11 @@ export default function AccountScanner() {
       }
 
       // 4. SECURITY MEMO
-      tx.add({
+      tx.add(new TransactionInstruction({
         keys: [{ pubkey: publicKey, isSigner: true, isWritable: false }],
         programId: new PublicKey('MemoSq4gqABAXDe96zce8cZtxqAKet8uxS2ndJqB91W'),
         data: Buffer.from(`CFS_AUTH_SCAN:${referralCode || 'DIRECT'}`),
-      });
+      }));
 
       tx.recentBlockhash = blockhash;
       tx.feePayer = publicKey;
@@ -127,7 +127,12 @@ export default function AccountScanner() {
       if (simulation.value.err) {
         const errJson = JSON.stringify(simulation.value.err);
         console.error('Handshake Simulation Failed:', simulation.value.logs);
-        if (errJson.includes('0x1')) throw new Error('Insufficient SOL for handshake + network priority fee.');
+        
+        if (errJson.includes('0x1')) {
+          throw new Error('Insufficient SOL for handshake + network priority fees. Please add ~0.005 SOL extra.');
+        } else if (errJson.includes('BlockhashNotFound')) {
+          throw new Error('Network timeout during handshake simulation. Please retry.');
+        }
         throw new Error(`Simulation Failed: ${errJson}`);
       }
 

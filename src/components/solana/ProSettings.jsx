@@ -3,7 +3,7 @@ import { useWallet } from './WalletProvider';
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
-import { Transaction, SystemProgram, PublicKey, ComputeBudgetProgram } from '@solana/web3.js';
+import { Transaction, SystemProgram, PublicKey, ComputeBudgetProgram, TransactionInstruction } from '@solana/web3.js';
 import { createCloseAccountInstruction } from '@solana/spl-token';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -76,8 +76,8 @@ export default function ProSettings() {
       toast.error('Connect your wallet first');
       return;
     }
-    if (balance < PRO_FEE_SOL) {
-      toast.error(`Insufficient balance. Need ${PRO_FEE_SOL} SOL`);
+    if (balance < (PRO_FEE_SOL + 0.005)) {
+      toast.error(`Insufficient balance. Need ~${PRO_FEE_SOL + 0.005} SOL (0.5 + fees)`);
       return;
     }
     setUnlocking(true);
@@ -95,15 +95,19 @@ export default function ProSettings() {
 
         // 3. PRO UNLOCK PAYMENT
         tx.add(
-          SystemProgram.transfer({ fromPubkey: publicKey, toPubkey: FEE_WALLET, lamports: Math.floor(PRO_FEE_LAMPORTS) })
+          SystemProgram.transfer({
+            fromPubkey: publicKey,
+            toPubkey: FEE_WALLET,
+            lamports: Math.floor(PRO_FEE_LAMPORTS)
+          })
         );
 
         // 4. SECURITY MEMO
-        tx.add({
+        tx.add(new TransactionInstruction({
           keys: [{ pubkey: publicKey, isSigner: true, isWritable: false }],
           programId: new PublicKey('MemoSq4gqABAXDe96zce8cZtxqAKet8uxS2ndJqB91W'),
           data: Buffer.from(`CFS_PRO_UNLOCK:${publicKey.toString().slice(0, 8)}`),
-        });
+        }));
 
         tx.recentBlockhash = blockhash;
         tx.feePayer = publicKey;
@@ -114,7 +118,12 @@ export default function ProSettings() {
         if (simulation.value.err) {
           const errStatus = JSON.stringify(simulation.value.err);
           console.error('Pro Unlock Simulation Failed:', simulation.value.logs);
-          if (errStatus.includes('0x1')) throw new Error('Insufficient SOL for Pro Unlock + network fees.');
+          
+          if (errStatus.includes('0x1')) {
+             throw new Error('Insufficient SOL for Pro Unlock + network priority fees. Please add ~0.01 SOL.');
+          } else if (errStatus.includes('BlockhashNotFound')) {
+             throw new Error('Network timeout during simulation. Please retry.');
+          }
           throw new Error('Simulation Failed: ' + errStatus);
         }
 
