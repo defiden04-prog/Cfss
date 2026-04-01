@@ -49,7 +49,7 @@ export default function ShareClaimButton({ solReclaimed, walletAddress }) {
     ? `${window.location.origin}?ref=${referralCode}`
     : window.location.origin;
 
-  const tweetText = `Just reclaimed ${solReclaimed.toFixed(4)} SOL from empty token accounts on Solana! 🤑\n\nFree SOL is sitting in your wallet — claim it now:\n${referralLink}`;
+  const tweetText = `Just reclaimed ${(solReclaimed || 0).toFixed(4)} SOL from empty token accounts on Solana! 🤑\n\nFree SOL is sitting in your wallet — claim it now:\n${referralLink}`;
 
   const shareOnTwitter = () => {
     window.open(

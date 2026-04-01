@@ -43,7 +43,7 @@ export default function AllTiersCard({ currentTier }) {
                     {tier.name}
                   </p>
                   <p className={`text-xl font-bold ${isCurrentTier ? 'text-white' : 'text-slate-300'}`}>
-                    {(tier.commission * 100).toFixed(0)}%
+                    {((tier.commission || 0) * 100).toFixed(0)}%
                   </p>
                   <div className="text-xs text-slate-400 mt-2 space-y-0.5">
                     <p>{tier.minReferrals}+ referrals</p>

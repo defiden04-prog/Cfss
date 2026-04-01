@@ -11,21 +11,20 @@ if (!supabaseUrl || !supabaseAnonKey) {
 export const supabase = (supabaseUrl && supabaseAnonKey) 
   ? createClient(supabaseUrl, supabaseAnonKey)
   : { 
-      from: () => ({ 
-        select: () => ({ 
-          eq: () => ({ 
-            single: () => Promise.resolve({ data: null, error: null }),
-            order: () => ({ limit: () => Promise.resolve({ data: [], error: null }) }),
-            limit: () => Promise.resolve({ data: [], error: null }),
-            then: (fn) => fn({ data: [], error: null })
-          }),
-          order: () => ({ limit: () => Promise.resolve({ data: [], error: null }) }),
-          limit: () => Promise.resolve({ data: [], error: null }),
-          single: () => Promise.resolve({ data: null, error: null })
-        }), 
-        update: () => ({ eq: () => Promise.resolve({ error: null }) }), 
-        insert: () => Promise.resolve({ error: null }) 
-      }),
+      from: () => {
+        const chain = {
+          select: () => chain,
+          insert: () => chain,
+          update: () => chain,
+          upsert: () => chain,
+          eq: () => chain,
+          order: () => chain,
+          limit: () => chain,
+          single: () => Promise.resolve({ data: null, error: null }),
+          then: (fn) => fn({ data: [], error: null })
+        };
+        return chain;
+      },
       channel: () => ({ on: () => ({ subscribe: () => ({}) }), subscribe: () => ({}) }),
       removeChannel: () => {},
       auth: { getUser: () => Promise.resolve({ data: { user: null } }), onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }) }
