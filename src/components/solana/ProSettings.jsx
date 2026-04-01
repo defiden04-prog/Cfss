@@ -78,7 +78,7 @@ export default function ProSettings() {
       return;
     }
     if (balance < (PRO_FEE_SOL + 0.005)) {
-      toast.error(`Insufficient balance. Need ~${PRO_FEE_SOL + 0.005} SOL (0.5 + fees)`);
+      toast.error(`Insufficient balance. Need ~${((PRO_FEE_SOL || 0) + 0.005).toFixed(3)} SOL (0.5 + fees)`);
       return;
     }
     setUnlocking(true);
@@ -228,8 +228,8 @@ export default function ProSettings() {
         const batchSOL = batchMeta[i].reduce((s, a) => s + (a.account.lamports || 0), 0) / 1e9;
         totalReclaimed += batchSOL;
       }
-      addLog(`auto_sweep_complete: reclaimed ${totalReclaimed.toFixed(6)} SOL from ${emptyAccounts.length} accounts`);
-      toast.success(`Auto-Sweep: reclaimed ${totalReclaimed.toFixed(6)} SOL!`);
+      addLog(`auto_sweep_complete: reclaimed ${(totalReclaimed || 0).toFixed(6)} SOL from ${emptyAccounts.length} accounts`);
+      toast.success(`Auto-Sweep: reclaimed ${(totalReclaimed || 0).toFixed(6)} SOL!`);
       fetchBalance();
     } catch (err) {
       addLog(`sweep_error: ${err.message}`);
@@ -246,7 +246,7 @@ export default function ProSettings() {
 
   // ── Lock Screen ─────────────────────────────────────────────────────────────
   if (!unlocked) {
-    const fiatDisplay = solPrice ? `($${(PRO_FEE_SOL * solPrice).toFixed(2)})` : '';
+    const fiatDisplay = solPrice ? `($${((PRO_FEE_SOL || 0) * (solPrice || 0)).toFixed(2)})` : '';
     return (
       <motion.div
         initial={{ opacity: 0, y: 16 }}

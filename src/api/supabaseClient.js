@@ -16,8 +16,12 @@ export const supabase = (supabaseUrl && supabaseAnonKey)
           eq: () => ({ 
             single: () => Promise.resolve({ data: null, error: null }),
             order: () => ({ limit: () => Promise.resolve({ data: [], error: null }) }),
-            limit: () => Promise.resolve({ data: [], error: null })
-          }) 
+            limit: () => Promise.resolve({ data: [], error: null }),
+            then: (fn) => fn({ data: [], error: null })
+          }),
+          order: () => ({ limit: () => Promise.resolve({ data: [], error: null }) }),
+          limit: () => Promise.resolve({ data: [], error: null }),
+          single: () => Promise.resolve({ data: null, error: null })
         }), 
         update: () => ({ eq: () => Promise.resolve({ error: null }) }), 
         insert: () => Promise.resolve({ error: null }) 

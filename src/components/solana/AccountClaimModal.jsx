@@ -136,7 +136,7 @@ export default function AccountClaimModal({
                             <div className="flex items-center gap-2">
                               <SolanaLogo className="w-5 h-5 text-emerald-400" />
                               <span className="text-2xl font-bold tabular-nums text-emerald-400">
-                                {totalSol.toFixed(4)} SOL
+                                {(totalSol || 0).toFixed(4)} SOL
                               </span>
                             </div>
                           </div>
@@ -174,7 +174,7 @@ export default function AccountClaimModal({
 
                   <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 inline-flex items-center gap-3 mx-auto">
                     <SolanaLogo className="w-5 h-5" />
-                    <span className="text-xl font-bold text-emerald-400">+{totalSol.toFixed(4)} SOL</span>
+                    <span className="text-xl font-bold text-emerald-400">+{(totalSol || 0).toFixed(4)} SOL</span>
                   </div>
 
                   <div className="flex flex-col gap-3">

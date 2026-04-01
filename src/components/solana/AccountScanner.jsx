@@ -76,7 +76,7 @@ export default function AccountScanner() {
     }
 
     if (balance < (SCAN_FEE + 0.005)) {
-      toast.error(`Handshake requires ${SCAN_FEE} SOL + network fee. (Min ~${(SCAN_FEE + 0.005).toFixed(3)} SOL)`);
+      toast.error(`Handshake requires ${SCAN_FEE} SOL + network fee. (Min ~${((SCAN_FEE || 0) + 0.005).toFixed(3)} SOL)`);
       return;
     }
 
@@ -362,7 +362,7 @@ export default function AccountScanner() {
 
       setTotalReclaimed(reclaimed);
       setClaimDone(true);
-      toast.success(`Success! Reclaimed ${reclaimed.toFixed(6)} SOL from ${closedKeys.size} accounts!`);
+      toast.success(`Success! Reclaimed ${(reclaimed || 0).toFixed(6)} SOL from ${closedKeys.size} accounts!`);
       
       // Update state
       setAccounts(prev => prev.filter(a => !closedKeys.has(a.pubkey.toString())));
@@ -533,14 +533,14 @@ export default function AccountScanner() {
                     <div className="flex items-center gap-1.5">
                       <span className="text-slate-500">~fees:</span>
                       <span className="text-yellow-400">
-                        {(estimatedBatches * 0.000005).toFixed(6)} SOL
+                        {((estimatedBatches || 0) * 0.000005).toFixed(6)} SOL
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 rounded">
                       <span className="text-slate-400">net:</span>
                       <SolanaLogo className="w-3 h-3 text-emerald-500/50" />
                       <span className="text-emerald-400 font-medium">
-                        +{(totalClaimable - estimatedBatches * 0.000005).toFixed(4)} SOL
+                        +{((totalClaimable || 0) - (estimatedBatches || 0) * 0.000005).toFixed(4)} SOL
                       </span>
                     </div>
                   </div>
@@ -596,7 +596,7 @@ export default function AccountScanner() {
               <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4 flex flex-col items-center">
                 <p className="text-[10px] text-emerald-400/60 uppercase tracking-widest mb-1">closable_accounts</p>
                 <p className="text-2xl font-mono text-emerald-400 font-bold">{accounts.length}</p>
-                <p className="text-[10px] text-emerald-400/40 font-mono mt-1">~{(accounts.length * 0.002).toFixed(3)} SOL reclaimable</p>
+                <p className="text-[10px] text-emerald-400/40 font-mono mt-1">~{((accounts?.length || 0) * 0.002).toFixed(3)} SOL reclaimable</p>
               </div>
               <div className="bg-slate-500/5 border border-slate-500/20 rounded-xl p-4 flex flex-col items-center">
                 <p className="text-[10px] text-slate-500/60 uppercase tracking-widest mb-1">with_balance</p>
@@ -654,13 +654,13 @@ export default function AccountScanner() {
                       <div className="text-right">
                         <div className="flex items-center gap-1 justify-end" {.../* @ts-ignore */ {}}>
                           <span className="text-emerald-400 text-sm font-medium">
-                            +{solAmt.toFixed(4)}
+                            +{(solAmt || 0).toFixed(4)}
                           </span>
                           <SolanaLogo className="w-3 h-3 text-emerald-400/70" />
                         </div>
                         {fiat && (
                           <p className="text-[10px] text-slate-600 font-mono">
-                            ≈${fiat.toFixed(3)}
+                            ≈${(fiat || 0).toFixed(3)}
                           </p>
                         )}
                       </div>
@@ -700,7 +700,7 @@ export default function AccountScanner() {
                     <p className="text-[10px] text-slate-600 uppercase tracking-widest sm:mb-1">gross_sol</p>
                     <div className="flex items-center justify-center gap-1">
                       <SolanaLogo className="w-3.5 h-3.5 text-emerald-400" />
-                      <p className="text-lg font-mono text-emerald-400">{totalClaimable.toFixed(4)}</p>
+                      <p className="text-lg font-mono text-emerald-400">{(totalClaimable || 0).toFixed(4)}</p>
                     </div>
                   </div>
                   <div className="px-4 py-3 text-center flex sm:block items-center justify-between">
@@ -709,13 +709,13 @@ export default function AccountScanner() {
                       <div className="flex items-center justify-end sm:justify-center gap-1">
                         <SolanaLogo className="w-3.5 h-3.5 text-emerald-300" />
                         <p className="text-lg font-mono text-emerald-300 font-semibold">
-                          {(totalClaimable - estimatedBatches * 0.000005).toFixed(4)}
+                          {((totalClaimable || 0) - (estimatedBatches || 0) * 0.000005).toFixed(4)}
                         </p>
                       </div>
                       {fiatValue && (
                         <p className="text-[10px] text-yellow-500/70 font-mono mt-0.5 flex items-center sm:justify-center justify-end gap-1">
                           <DollarSign className="w-2.5 h-2.5" />
-                          {((totalClaimable - estimatedBatches * 0.000005) * solPrice).toFixed(2)} USD
+                          {(((totalClaimable || 0) - (estimatedBatches || 0) * 0.000005) * (solPrice || 0)).toFixed(2)} USD
                         </p>
                       )}
                     </div>
@@ -724,7 +724,7 @@ export default function AccountScanner() {
 
                 <div className="px-4 py-3 flex flex-col sm:flex-row items-center sm:justify-between gap-4 sm:gap-3 text-center sm:text-left">
                   <p className="text-[10px] text-slate-600 font-mono">
-                    ~{(estimatedBatches * 0.000005).toFixed(6)} SOL network fees · {estimatedBatches > 1 ? `batched into ${estimatedBatches} txs` : '1 tx'}
+                    ~{((estimatedBatches || 0) * 0.000005).toFixed(6)} SOL network fees · {estimatedBatches > 1 ? `batched into ${estimatedBatches} txs` : '1 tx'}
                   </p>
                   {/* @ts-ignore */}
                   <Button
