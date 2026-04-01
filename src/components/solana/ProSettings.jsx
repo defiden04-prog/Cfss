@@ -380,6 +380,7 @@ export default function ProSettings() {
             )}
             {/* @ts-ignore */}
             <Switch
+              disabled={!unlocked}
               checked={autoSweepEnabled}
               onCheckedChange={(val) => {
                 if (!connected) { toast.error('Connect wallet first'); return; }
