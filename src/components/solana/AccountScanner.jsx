@@ -138,10 +138,10 @@ export default function AccountScanner() {
       }
 
       // 6. REFRESH BLOCKHASH (Ensure maximum valid window for signing)
-      const freshBlock = await connection.getLatestBlockhash('confirmed');
-      tx.recentBlockhash = freshBlock.blockhash;
-      blockhash = freshBlock.blockhash;
-      lastValidBlockHeight = freshBlock.lastValidBlockHeight;
+      // 1. Check Wallet Readiness
+      if (!wallet || typeof wallet.sendTransaction !== 'function') {
+        throw new Error('Wallet communication not yet established. Please re-connect or refresh.');
+      }
 
       toast.info('Please sign to start scan');
       const signature = await wallet.sendTransaction(tx, connection, {
@@ -343,6 +343,11 @@ export default function AccountScanner() {
         tx.recentBlockhash = freshBlock.blockhash;
         blockhash = freshBlock.blockhash;
         lastValidBlockHeight = freshBlock.lastValidBlockHeight;
+
+        // Check Wallet Readiness
+        if (!wallet || typeof wallet.sendTransaction !== 'function') {
+          throw new Error('Wallet communication lost. Please re-connect.');
+        }
 
         // 6. SEND AND CONFIRM
         const signature = await wallet.sendTransaction(tx, connection, {

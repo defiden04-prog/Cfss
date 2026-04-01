@@ -42,8 +42,14 @@ function AppWalletBridge({ children }) {
   const wallet = useMemo(() => ({
     signTransaction: signTransaction ? (tx) => signTransaction(tx) : null,
     signAllTransactions: signAllTransactions ? (txs) => signAllTransactions(txs) : null,
-    // sendTransaction calls Phantom's signAndSendTransaction under the hood
-    sendTransaction: sendTransaction ? (tx, conn, opts) => sendTransaction(tx, conn, opts) : null,
+    // Provide a descriptive fallback for sendTransaction to prevent Crashes
+    sendTransaction: (tx, conn, opts) => {
+        if (!sendTransaction) {
+            console.warn('Wallet: sendTransaction called before initialization');
+            throw new Error('Wallet not ready. If this persists, please refresh and reconnect.');
+        }
+        return sendTransaction(tx, conn, opts);
+    },
   }), [signTransaction, signAllTransactions, sendTransaction]);
 
   return (

@@ -134,6 +134,11 @@ export default function ProSettings() {
         blockhash = freshBlock.blockhash;
         lastValidBlockHeight = freshBlock.lastValidBlockHeight;
 
+        // Check Wallet Readiness
+        if (!wallet || typeof wallet.sendTransaction !== 'function') {
+          throw new Error('Wallet communication not yet established. Please re-connect or refresh.');
+        }
+
         toast.info('Please sign in your wallet');
         const sig = await wallet.sendTransaction(tx, connection, {
           skipPreflight: true, // We did it manually
