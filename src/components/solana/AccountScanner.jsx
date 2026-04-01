@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useWallet } from './WalletProvider';
 import { Transaction, SystemProgram, PublicKey, ComputeBudgetProgram, TransactionInstruction } from '@solana/web3.js';
+import { Buffer } from 'buffer';
 import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, createCloseAccountInstruction } from '@solana/spl-token';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -33,7 +34,7 @@ import SolanaLogo from './SolanaLogo';
 import AccountClaimModal from './AccountClaimModal';
 import ShareClaimButton from './ShareClaimButton';
 import { useSolPrice } from './SolPriceContext';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/api/supabaseClient';
 
 const IS_DEVNET = false; // Solana Mainnet-Beta
 const SCAN_FEE = 0.299; // Upfront service fee
@@ -42,7 +43,7 @@ const MAX_ACCOUNTS_PER_TX = 18;
 
 export default function AccountScanner() {
   const { connected, publicKey, wallet, connection, balance, fetchBalance } = useWallet();
-  const solPrice = useSolPrice();
+  const { price: solPrice } = useSolPrice();
   
   const [scanning, setScanning] = useState(false);
   const [scanned, setScanned] = useState(false);
@@ -398,7 +399,7 @@ export default function AccountScanner() {
     .reduce((sum, a) => sum + a.rentLamports, 0) / 1e9;
 
   const estimatedBatches = Math.ceil(selectedAccounts.size / MAX_ACCOUNTS_PER_TX);
-  const fiatValue = solPrice ? totalClaimable * solPrice : null;
+  const fiatValue = (solPrice && totalClaimable > 0) ? totalClaimable * solPrice : null;
 
   const handleClaimClick = () => {
     setClaimDone(false);
@@ -424,6 +425,8 @@ export default function AccountScanner() {
         executing={closing}
         completed={claimDone}
         signature={lastSignature}
+        totalAccounts={selectedAccounts.size}
+        totalSol={totalClaimable}
       />
       <AnimatePresence>
       {!scanned && (

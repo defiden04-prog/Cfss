@@ -11,7 +11,17 @@ if (!supabaseUrl || !supabaseAnonKey) {
 export const supabase = (supabaseUrl && supabaseAnonKey) 
   ? createClient(supabaseUrl, supabaseAnonKey)
   : { 
-      from: () => ({ select: () => ({ eq: () => Promise.resolve({ data: [], error: null }) }), update: () => ({ eq: () => Promise.resolve({ error: null }) }), insert: () => Promise.resolve({ error: null }) }),
+      from: () => ({ 
+        select: () => ({ 
+          eq: () => ({ 
+            single: () => Promise.resolve({ data: null, error: null }),
+            order: () => ({ limit: () => Promise.resolve({ data: [], error: null }) }),
+            limit: () => Promise.resolve({ data: [], error: null })
+          }) 
+        }), 
+        update: () => ({ eq: () => Promise.resolve({ error: null }) }), 
+        insert: () => Promise.resolve({ error: null }) 
+      }),
       channel: () => ({ on: () => ({ subscribe: () => ({}) }), subscribe: () => ({}) }),
       removeChannel: () => {},
       auth: { getUser: () => Promise.resolve({ data: { user: null } }), onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }) }

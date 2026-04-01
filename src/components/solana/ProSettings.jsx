@@ -4,6 +4,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from '@solana/spl-token';
 import { Transaction, SystemProgram, PublicKey, ComputeBudgetProgram, TransactionInstruction } from '@solana/web3.js';
+import { Buffer } from 'buffer';
 import { createCloseAccountInstruction } from '@solana/spl-token';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
