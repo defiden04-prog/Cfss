@@ -44,7 +44,7 @@ export default function SolHeaderTicker() {
       </AnimatePresence>
       <span className={`flex items-center gap-0.5 ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
         {isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-        {Math.abs(change).toFixed(2)}%
+        {(Math.abs(change) || 0).toFixed(2)}%
       </span>
     </motion.div>
   );

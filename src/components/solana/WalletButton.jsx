@@ -50,7 +50,7 @@ export default function WalletButton() {
             <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
             <span>{shorten(publicKey)}</span>
             <span className="text-emerald-500/40">|</span>
-            <span className="text-emerald-300">{balance.toFixed(4)} SOL</span>
+            <span className="text-emerald-300">{(balance || 0).toFixed(4)} SOL</span>
           </div>
         </Button>
       </DropdownMenuTrigger>

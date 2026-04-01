@@ -31,9 +31,9 @@ import {
 } from "@/components/ui/select";
 import MatrixLoader from './MatrixLoader';
 import SolanaLogo from './SolanaLogo';
-import AccountClaimModal from './AccountClaimModal';
-import ShareClaimButton from './ShareClaimButton';
-import { useSolPrice } from './SolPriceContext';
+import AccountClaimModal from '@/components/solana/AccountClaimModal';
+import ShareClaimButton from '@/components/solana/ShareClaimButton';
+import { useSolPrice } from '@/components/solana/SolPriceContext';
 import { supabase } from '@/api/supabaseClient';
 
 const IS_DEVNET = false; // Solana Mainnet-Beta

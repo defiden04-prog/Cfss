@@ -234,7 +234,7 @@ export default function HeroSection() {
               animate={{ opacity: 1, scale: 1 }}
               className="text-2xl font-semibold text-emerald-400 tabular-nums"
             >
-              {(solRecovered + solTick).toFixed(2)}
+              {(solRecovered + (solTick || 0)).toFixed(2)}
             </motion.p>
           </AnimatePresence>
           <p className="text-[10px] text-slate-600 mt-1">SOL total</p>

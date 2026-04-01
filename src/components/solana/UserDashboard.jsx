@@ -187,7 +187,7 @@ export default function UserDashboard() {
           <p className="text-[10px] text-slate-600 uppercase tracking-widest mb-1">balance</p>
           <div className="flex items-center gap-1.5 justify-end">
             <SolanaLogo className="w-4 h-4 text-emerald-400" />
-            <p className="text-emerald-400 text-sm">{balance.toFixed(4)} SOL</p>
+            <p className="text-emerald-400 text-sm">{(balance || 0).toFixed(4)} SOL</p>
           </div>
         </div>
       </div>
@@ -196,7 +196,7 @@ export default function UserDashboard() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard
           label="total_earned"
-          value={`${totalEarned.toFixed(4)}`}
+          value={`${(totalEarned || 0).toFixed(4)}`}
           sub="SOL from referrals"
           icon={SolanaLogo}
           accent="emerald"
