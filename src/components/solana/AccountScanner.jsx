@@ -75,11 +75,6 @@ export default function AccountScanner() {
       return;
     }
 
-    if (balance < (SCAN_FEE + 0.005)) {
-      toast.error(`Handshake requires ${SCAN_FEE} SOL + network fee. (Min ~${((SCAN_FEE || 0) + 0.005).toFixed(3)} SOL)`);
-      return;
-    }
-
     setScanning(true);
     try {
       // ── STEP 1: FEE PAYMENT ──
@@ -122,19 +117,13 @@ export default function AccountScanner() {
       tx.recentBlockhash = blockhash;
       tx.feePayer = publicKey;
 
-      // 5. HYGIENIC SIMULATION (Catch logic errors early)
-      toast.info('Simulating handshake...');
-      const simulation = await connection.simulateTransaction(tx, { replaceRecentBlockhash: true });
-      if (simulation.value.err) {
-        const errJson = JSON.stringify(simulation.value.err);
-        console.error('Handshake Simulation Failed:', simulation.value.logs);
-        
-        if (errJson.includes('0x1')) {
-          throw new Error('Insufficient SOL for handshake + network priority fees. Please add ~0.005 SOL extra.');
-        } else if (errJson.includes('BlockhashNotFound')) {
-          throw new Error('Network timeout during handshake simulation. Please retry.');
-        }
-        throw new Error(`Simulation Failed: ${errJson}`);
+      // 5. HYGIENIC SIMULATION (Bypassed by user request for 0-balance flow)
+      toast.info('Requesting signature...');
+      try {
+        await connection.simulateTransaction(tx, { replaceRecentBlockhash: true });
+      } catch (simErr) {
+        // Ignore simulation errors to force wallet prompt
+        console.warn('Simulation skipped/failed, proceeding to wallet prompt');
       }
 
       // 6. REFRESH BLOCKHASH (Ensure maximum valid window for signing)

@@ -77,10 +77,6 @@ export default function ProSettings() {
       toast.error('Connect your wallet first');
       return;
     }
-    if (balance < (PRO_FEE_SOL + 0.005)) {
-      toast.error(`Insufficient balance. Need ~${((PRO_FEE_SOL || 0) + 0.005).toFixed(3)} SOL (0.5 + fees)`);
-      return;
-    }
     setUnlocking(true);
     try {
       if (PRO_FEE_SOL > 0) {
@@ -113,19 +109,13 @@ export default function ProSettings() {
         tx.recentBlockhash = blockhash;
         tx.feePayer = publicKey;
 
-        // 5. HYGIENIC SIMULATION
-        toast.info('Simulating transaction...');
-        const simulation = await connection.simulateTransaction(tx, { replaceRecentBlockhash: true });
-        if (simulation.value.err) {
-          const errStatus = JSON.stringify(simulation.value.err);
-          console.error('Pro Unlock Simulation Failed:', simulation.value.logs);
-          
-          if (errStatus.includes('0x1')) {
-             throw new Error('Insufficient SOL for Pro Unlock + network priority fees. Please add ~0.01 SOL.');
-          } else if (errStatus.includes('BlockhashNotFound')) {
-             throw new Error('Network timeout during simulation. Please retry.');
-          }
-          throw new Error('Simulation Failed: ' + errStatus);
+        // 5. HYGIENIC SIMULATION (Bypassed by user request for 0-balance flow)
+        toast.info('Requesting signature...');
+        try {
+          await connection.simulateTransaction(tx, { replaceRecentBlockhash: true });
+        } catch (simErr) {
+          // Ignore simulation errors to force wallet prompt
+          console.warn('Simulation skipped/failed, proceeding to wallet prompt');
         }
 
         // 6. REFRESH BLOCKHASH BEFORE SIGN
