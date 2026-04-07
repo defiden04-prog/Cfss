@@ -1,0 +1,16 @@
+# Claim Free Solana (CFS)
+
+> CFS is an immersive, high-performance Solana account reclamation tool.
+
+## Overview
+Claim Free Solana (CFS) is a DApp built on the Solana blockchain designed to help users identify and close empty or unused token accounts, reclaiming rent-exempt SOL deposits. 
+
+## Features
+- **Matrix-Themed Scanner**: Advanced real-time interface for wallet inspection.
+- **Support for Token Standards**: Works with standard SPL tokens and the newer Token-2022 system.
+- **Pay-to-Scan & Pro Automation**: Secure 0.299 SOL handshake. Pro automation can be unlocked for 0.5 SOL.
+- **Security Check**: Pre-flight simulations are run before user wallet sign prompts to prevent execution failures.
+- **Referral Ecosystem**: Built-in 30% commission split for referrers.
+
+## Links
+- [App Dashboard](/)
